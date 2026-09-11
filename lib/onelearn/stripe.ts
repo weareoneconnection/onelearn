@@ -6,7 +6,8 @@ type StripeErrorResponse = { error?: { message?: string; code?: string } };
 
 export class StripeConfigurationError extends Error {}
 export class StripeResponseError extends Error {
-  constructor(message: string, public readonly code?: string) { super(message); }
+  readonly code?: string;
+  constructor(message: string, code?: string) { super(message); this.code = code; }
 }
 
 function secretKey() {

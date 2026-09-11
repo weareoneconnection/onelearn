@@ -15,6 +15,13 @@
       "when": 1789115826165,
       "tag": "0001_chubby_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789117172928,
+      "tag": "0002_identity_hardening",
+      "breakpoints": true
     }
   ]
 }

@@ -3,12 +3,15 @@ import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { getD1 } from "@/db";
 import { assertSourceCapacity, BillingLimitError, consumeAiCredits, getBillingAdminMetrics, refundAiCredits, type BillableAction } from "./billing";
 import type { GeneratedCourseBundle } from "./generated-course";
+import { clientIpFromHeaders, hashClientKey } from "./identity";
 
 export type LearnerIdentity = {
   userId: string;
   email: string;
   displayName: string;
   mode: "chatgpt" | "device";
+  /** Hashed client IP; set for device learners to enforce the per-IP anonymous cap. */
+  clientKey?: string;
 };
 
 export type SourceRecord = {
@@ -44,6 +47,8 @@ const memoryStore = memory.__onelearnMemory ??= {
   usage: new Map(),
 };
 
+const anonymousMemoryUsage = new Map<string, number>();
+
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 const today = () => new Date().toISOString().slice(0, 10);
 const safeJson = <T>(value: string | null | undefined): T | null => {
@@ -64,6 +69,7 @@ export async function resolveLearner(request: Request, locale: "zh" | "en" = "zh
     email: `device-${deviceId}@local.invalid`,
     displayName: locale === "zh" ? "设备学习者" : "Device learner",
     mode: "device",
+    clientKey: await hashClientKey(clientIpFromHeaders(request.headers)),
   };
   await ensureUser(learner, locale);
   return learner;
@@ -194,9 +200,10 @@ export async function saveQualityReport(courseVersionId: string, evaluatorModel:
 export async function recordLearningEvent(learner: LearnerIdentity, eventType: string, payload: unknown, courseVersionId?: string | null) {
   const db = await getD1();
   if (!db) return;
+  const ownedId = await ownedCourseVersionId(db, learner, courseVersionId);
   await db.prepare(`INSERT INTO learning_events (id, user_id, course_version_id, event_type, payload_json, created_at)
     VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(crypto.randomUUID(), learner.userId, courseVersionId ?? null, eventType, JSON.stringify(payload), nowSeconds()).run();
+    .bind(crypto.randomUUID(), learner.userId, ownedId, eventType, JSON.stringify(payload), nowSeconds()).run();
 }
 
 export async function saveSourceRecord(learner: LearnerIdentity, source: SourceRecord & { objectKey?: string | null }) {
@@ -242,30 +249,75 @@ function numericEnv(name: string, fallback: number) {
 export async function reserveAiUsage(learner: LearnerIdentity, plannedTokens = 0, action?: BillableAction) {
   const requestLimit = numericEnv("ONELEARN_DAILY_AI_REQUESTS", 40);
   const tokenLimit = numericEnv("ONELEARN_DAILY_TOKEN_BUDGET", 250_000);
-  const key = `${learner.userId}:${today()}`;
+  const anonymousLimit = numericEnv("ONELEARN_ANONYMOUS_DAILY_AI_REQUESTS_PER_IP", 15);
+  const anonymousKey = learner.mode === "device" ? learner.clientKey ?? "unknown" : null;
+  const day = today();
+  if (plannedTokens > tokenLimit) throw new UsageLimitError("daily_token_limit");
+  const toUsageLimit = (error: unknown) => error instanceof BillingLimitError ? new UsageLimitError(error.code) : error;
+
   const db = await getD1();
   if (!db) {
+    // Single-threaded in-memory checks: check everything first, then commit.
+    const key = `${learner.userId}:${day}`;
     const usage = memoryStore.usage.get(key) ?? { requests: 0, inputTokens: 0, outputTokens: 0, failures: 0 };
     if (usage.requests >= requestLimit) throw new UsageLimitError("daily_request_limit");
     if (usage.inputTokens + usage.outputTokens + plannedTokens > tokenLimit) throw new UsageLimitError("daily_token_limit");
-    try { await consumeAiCredits(learner, action); }
-    catch (error) { if (error instanceof BillingLimitError) throw new UsageLimitError(error.code); throw error; }
+    const anonymousCount = anonymousKey ? anonymousMemoryUsage.get(`${anonymousKey}:${day}`) ?? 0 : 0;
+    if (anonymousKey && anonymousCount >= anonymousLimit) throw new UsageLimitError("daily_request_limit");
+    try { await consumeAiCredits(learner, action); } catch (error) { throw toUsageLimit(error); }
     usage.requests += 1;
     memoryStore.usage.set(key, usage);
+    if (anonymousKey) anonymousMemoryUsage.set(`${anonymousKey}:${day}`, anonymousCount + 1);
     return { ...usage, requestLimit, tokenLimit, storage: "ephemeral" as const };
   }
-  const usage = await db.prepare(`SELECT requests, input_tokens AS inputTokens, output_tokens AS outputTokens, failures
-    FROM usage_daily WHERE user_id = ? AND day = ?`).bind(learner.userId, today())
-    .first<{ requests: number; inputTokens: number; outputTokens: number; failures: number }>();
-  if ((usage?.requests ?? 0) >= requestLimit) throw new UsageLimitError("daily_request_limit");
-  if ((usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0) + plannedTokens > tokenLimit) throw new UsageLimitError("daily_token_limit");
-  try { await consumeAiCredits(learner, action); }
-  catch (error) { if (error instanceof BillingLimitError) throw new UsageLimitError(error.code); throw error; }
-  await db.prepare(`INSERT INTO usage_daily (id, user_id, day, requests, input_tokens, output_tokens, failures, updated_at)
+
+  // Each counter is incremented by one conditional upsert, so concurrent requests cannot
+  // overshoot a limit. Later failures roll back the counters already taken.
+  const now = nowSeconds();
+  const reserved = await db.prepare(`INSERT INTO usage_daily (id, user_id, day, requests, input_tokens, output_tokens, failures, updated_at)
     VALUES (?, ?, ?, 1, 0, 0, 0, ?)
-    ON CONFLICT(user_id, day) DO UPDATE SET requests = usage_daily.requests + 1, updated_at = excluded.updated_at`)
-    .bind(crypto.randomUUID(), learner.userId, today(), nowSeconds()).run();
-  return { requests: (usage?.requests ?? 0) + 1, requestLimit, tokenLimit, storage: "durable" as const };
+    ON CONFLICT(user_id, day) DO UPDATE SET requests = usage_daily.requests + 1, updated_at = excluded.updated_at
+    WHERE usage_daily.requests < ? AND usage_daily.input_tokens + usage_daily.output_tokens + ? <= ?`)
+    .bind(crypto.randomUUID(), learner.userId, day, now, requestLimit, plannedTokens, tokenLimit).run();
+  if (!reserved.meta.changes) {
+    const usage = await db.prepare("SELECT requests FROM usage_daily WHERE user_id = ? AND day = ?")
+      .bind(learner.userId, day).first<{ requests: number }>();
+    throw new UsageLimitError((usage?.requests ?? 0) >= requestLimit ? "daily_request_limit" : "daily_token_limit");
+  }
+  const releaseDaily = () => db.prepare(`UPDATE usage_daily SET requests = MAX(0, requests - 1), updated_at = ?
+    WHERE user_id = ? AND day = ?`).bind(nowSeconds(), learner.userId, day).run();
+  const releaseAnonymous = () => anonymousKey ? db.prepare(`UPDATE anonymous_usage_daily SET requests = MAX(0, requests - 1), updated_at = ?
+    WHERE client_key = ? AND day = ?`).bind(nowSeconds(), anonymousKey, day).run() : Promise.resolve();
+
+  if (anonymousKey) {
+    const anonymous = await db.prepare(`INSERT INTO anonymous_usage_daily (client_key, day, requests, updated_at)
+      VALUES (?, ?, 1, ?)
+      ON CONFLICT(client_key, day) DO UPDATE SET requests = anonymous_usage_daily.requests + 1, updated_at = excluded.updated_at
+      WHERE anonymous_usage_daily.requests < ?`)
+      .bind(anonymousKey, day, now, anonymousLimit).run();
+    if (!anonymous.meta.changes) {
+      await releaseDaily();
+      throw new UsageLimitError("daily_request_limit");
+    }
+  }
+
+  try {
+    await consumeAiCredits(learner, action);
+  } catch (error) {
+    await Promise.all([releaseDaily(), releaseAnonymous()]).catch(() => undefined);
+    throw toUsageLimit(error);
+  }
+  const usage = await db.prepare("SELECT requests FROM usage_daily WHERE user_id = ? AND day = ?")
+    .bind(learner.userId, day).first<{ requests: number }>();
+  return { requests: Number(usage?.requests ?? 1), requestLimit, tokenLimit, storage: "durable" as const };
+}
+
+/** Returns the id only if that course version belongs to the learner, so clients cannot attach data to other users' courses. */
+async function ownedCourseVersionId(db: D1Database, learner: LearnerIdentity, courseVersionId?: string | null) {
+  if (!courseVersionId) return null;
+  const row = await db.prepare("SELECT id FROM course_versions WHERE id = ? AND user_id = ?")
+    .bind(courseVersionId, learner.userId).first<{ id: string }>();
+  return row?.id ?? null;
 }
 
 export async function reserveSourceCapacity(learner: LearnerIdentity, incomingBytes: number) {
@@ -302,6 +354,7 @@ export async function recordAiRun(args: {
     memoryStore.usage.set(key, usage);
     return;
   }
+  const ownedId = await ownedCourseVersionId(db, args.learner, args.courseVersionId);
   await db.batch([
     db.prepare(`INSERT INTO ai_runs
       (id, user_id, purpose, model, prompt_version, input_tokens, output_tokens, latency_ms,
@@ -309,7 +362,7 @@ export async function recordAiRun(args: {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), args.learner.userId, args.purpose, args.model, args.promptVersion,
         args.inputTokens ?? 0, args.outputTokens ?? 0, args.latencyMs, args.status,
-        args.responseId ?? null, args.errorCode ?? null, args.courseVersionId ?? null, nowSeconds()),
+        args.responseId ?? null, args.errorCode ?? null, ownedId, nowSeconds()),
     db.prepare(`UPDATE usage_daily SET input_tokens = input_tokens + ?, output_tokens = output_tokens + ?,
       failures = failures + ?, updated_at = ? WHERE user_id = ? AND day = ?`)
       .bind(args.inputTokens ?? 0, args.outputTokens ?? 0, args.status === "success" ? 0 : 1,

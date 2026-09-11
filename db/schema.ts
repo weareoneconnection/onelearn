@@ -1,11 +1,20 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Production domain shape. Demo mode does not require a database.
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(), email: text("email").notNull(), displayName: text("display_name"),
   locale: text("locale").notNull().default("en"), createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull(),
-}, (t) => [uniqueIndex("users_email_unique").on(t.email)]);
+}, (t) => [index("idx_users_email").on(t.email)]);
+
+// Daily AI request counter for anonymous device learners, keyed by hashed client IP.
+// Device ids are client-generated, so this caps what rotating ids can consume.
+export const anonymousUsageDaily = sqliteTable("anonymous_usage_daily", {
+  clientKey: text("client_key").notNull(),
+  day: text("day").notNull(),
+  requests: integer("requests").notNull().default(0),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.clientKey, t.day] })]);
 
 export const userPreferences = sqliteTable("user_preferences", {
   userId: text("user_id").primaryKey().references(() => users.id),
