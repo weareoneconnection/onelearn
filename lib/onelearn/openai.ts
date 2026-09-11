@@ -215,3 +215,18 @@ export async function searchVectorStore(vectorStoreId: string, query: string, ma
     excerpt: (result.content ?? []).filter((part) => part.type === "text").map((part) => part.text ?? "").join("\n").slice(0, 6_000),
   })).filter((result) => result.excerpt);
 }
+
+export function getRealtimeModel() {
+  return process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2.1";
+}
+
+/** Short-lived client secret the browser uses to open a Realtime (WebRTC) session; the API key never leaves the server. */
+export async function createRealtimeClientSecret(session: Record<string, unknown>, expiresSeconds = 60) {
+  const { data } = await openAIRequest<{ value?: string; expires_at?: number }>("/realtime/client_secrets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expires_after: { anchor: "created_at", seconds: expiresSeconds }, session }),
+  }, 20_000);
+  if (!data.value) throw new OpenAIResponseError("OpenAI did not return a realtime client secret");
+  return { value: data.value, expiresAt: data.expires_at ?? null };
+}

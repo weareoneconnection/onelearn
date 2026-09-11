@@ -57,6 +57,13 @@
       "when": 1789135693597,
       "tag": "0007_growth",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789143575635,
+      "tag": "0008_voice_sessions",
+      "breakpoints": true
     }
   ]
 }

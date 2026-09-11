@@ -322,3 +322,17 @@ export const proofShares = sqliteTable("proof_shares", {
   createdAt: integer("created_at").notNull(),
   revokedAt: integer("revoked_at"),
 }, (t) => [uniqueIndex("proof_shares_user_unique").on(t.userId)]);
+
+// Realtime voice tutor sessions. Time is reserved from the monthly voice allowance
+// (entitlement_usage metric 'voice_seconds') at start and settled on end.
+export const voiceSessions = sqliteTable("voice_sessions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  courseVersionId: text("course_version_id"),
+  lessonId: text("lesson_id"),
+  month: text("month").notNull(),
+  reservedSeconds: integer("reserved_seconds").notNull(),
+  usedSeconds: integer("used_seconds"),
+  startedAt: integer("started_at").notNull(),
+  endedAt: integer("ended_at"),
+}, (t) => [index("idx_voice_sessions_user_started").on(t.userId, t.startedAt)]);

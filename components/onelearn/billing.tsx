@@ -82,6 +82,7 @@ export function BillingView({ locale }: { locale: Locale }) {
     l(`约 ${plan.courseEquivalent} 门新课程`, `About ${plan.courseEquivalent} new courses`),
     l(`约 ${plan.tutorEquivalent.toLocaleString()} 次导师问答`, `About ${plan.tutorEquivalent.toLocaleString()} tutor turns`),
     l(`${plan.sourceCount} 份可信资料`, `${plan.sourceCount} trusted sources`),
+    ...(plan.voiceMinutes ? [l(`每月 ${plan.voiceMinutes} 分钟语音导师`, `${plan.voiceMinutes} voice tutor minutes / month`)] : []),
   ];
   return <div className="billing-page animate-in fade-in duration-500">
     <section className="billing-hero">

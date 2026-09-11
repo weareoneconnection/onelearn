@@ -34,7 +34,7 @@ export type OperationsSnapshot = {
   qualityQueue: Array<{ id: string; title: string; version: number; locale: string; qualityScore: number | null; qualityStatus: string; createdAt: number; email: string }>;
 };
 
-export type BillingPlan = { id: "free" | "personal" | "pro" | "team"; nameZh: string; nameEn: string; monthlyPriceCny: number | null; annualPriceCny: number | null; aiCredits: number; sourceCount: number; sourceBytes: number; courseEquivalent: number; tutorEquivalent: number };
+export type BillingPlan = { id: "free" | "personal" | "pro" | "team"; nameZh: string; nameEn: string; monthlyPriceCny: number | null; annualPriceCny: number | null; aiCredits: number; sourceCount: number; sourceBytes: number; courseEquivalent: number; tutorEquivalent: number; voiceMinutes?: number };
 
 export type BillingPayload = {
   identity: { displayName: string; email: string; mode: "chatgpt" | "clerk" | "device" };
