@@ -282,3 +282,43 @@ export const diagnostics = sqliteTable("diagnostics", {
   createdAt: integer("created_at").notNull(),
   completedAt: integer("completed_at"),
 }, (t) => [uniqueIndex("diagnostics_user_course_unique").on(t.userId, t.courseVersionId)]);
+
+// Extra AI credits on top of the plan for a given month (referral rewards, goodwill).
+// The unique (user, reason, reference) key makes every grant idempotent.
+export const creditGrants = sqliteTable("credit_grants", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  month: text("month").notNull(),
+  credits: integer("credits").notNull(),
+  reason: text("reason").notNull(),
+  reference: text("reference").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("credit_grants_user_reason_reference_unique").on(t.userId, t.reason, t.reference),
+  index("idx_credit_grants_user_month").on(t.userId, t.month),
+]);
+
+export const referralCodes = sqliteTable("referral_codes", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  code: text("code").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [uniqueIndex("referral_codes_code_unique").on(t.code)]);
+
+export const referrals = sqliteTable("referrals", {
+  id: text("id").primaryKey(),
+  referrerUserId: text("referrer_user_id").notNull().references(() => users.id),
+  inviteeUserId: text("invitee_user_id").notNull().references(() => users.id),
+  code: text("code").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  uniqueIndex("referrals_invitee_unique").on(t.inviteeUserId),
+  index("idx_referrals_referrer").on(t.referrerUserId, t.createdAt),
+]);
+
+// Public, revocable link to a learner's verified capabilities.
+export const proofShares = sqliteTable("proof_shares", {
+  token: text("token").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  createdAt: integer("created_at").notNull(),
+  revokedAt: integer("revoked_at"),
+}, (t) => [uniqueIndex("proof_shares_user_unique").on(t.userId)]);

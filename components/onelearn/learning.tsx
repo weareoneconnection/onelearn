@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { type Locale, pick } from "@/lib/onelearn/i18n";
 import type { GeneratedCourseBundle, GeneratedLesson } from "@/lib/onelearn/generated-course";
+import { track } from "@/lib/onelearn/analytics";
 import { oneLearnFetch } from "./client";
 import { courseProgress, lessonNeighbors } from "./progress";
 import type { MasteryOverview, MasteryRecord, View } from "./types";
@@ -182,6 +183,7 @@ export function QuestionCard({ locale, bundle, lesson, mode, onAnswered }: { loc
       const payload = await response.json() as { correct?: boolean; correctOption?: number; explanation?: string; record?: { score: number }; error?: string };
       if (!response.ok || typeof payload.correct !== "boolean") throw new Error(payload.error || l("答案未能记录", "The answer could not be recorded"));
       setResult({ correct: payload.correct, correctOption: payload.correctOption ?? localCorrect, explanation: payload.explanation ?? question.explanation, score: payload.record?.score });
+      track("practice_answered", { mode, correct: payload.correct });
       onAnswered();
     } catch (answerError) {
       setError(answerError instanceof Error ? answerError.message : l("答案未能记录", "The answer could not be recorded"));

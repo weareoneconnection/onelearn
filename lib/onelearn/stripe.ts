@@ -68,6 +68,7 @@ export async function createCheckoutSession(args: {
   planId: "personal" | "pro";
   interval: BillingInterval;
   origin: string;
+  trialDays?: number;
 }) {
   const body = new URLSearchParams();
   body.set("mode", "subscription");
@@ -82,6 +83,7 @@ export async function createCheckoutSession(args: {
   body.set("subscription_data[metadata][user_id]", args.userId);
   body.set("subscription_data[metadata][plan_id]", args.planId);
   body.set("subscription_data[metadata][billing_interval]", args.interval);
+  if (args.trialDays && args.trialDays > 0) body.set("subscription_data[trial_period_days]", String(args.trialDays));
   body.set("allow_promotion_codes", "true");
   body.set("billing_address_collection", "auto");
   body.set("locale", "auto");

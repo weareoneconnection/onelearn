@@ -51,6 +51,7 @@ async function handlePOST(request: NextRequest) {
       planId: parsed.data.planId,
       interval: parsed.data.interval,
       origin: trustedOrigin(request),
+      trialDays: current.trialDays,
     });
     if (!session.url) throw new StripeResponseError("Stripe Checkout did not return a URL");
     return NextResponse.json({ url: session.url });

@@ -1,3 +1,4 @@
+import type { D1Database } from "@cloudflare/workers-types";
 import { getD1 } from "@/db";
 import type { LearnerIdentity } from "./persistence";
 
@@ -102,6 +103,7 @@ export async function consumeAiCredits(learner: LearnerIdentity, action?: Billab
     return { planId, creditsUsed: used + credits, creditsLimit: limit, charged: credits };
   }
 
+  const totalLimit = limit + await bonusCredits(db, learner.userId, month);
   const result = await db.prepare(`INSERT INTO entitlement_usage
       (id, user_id, month, metric, quantity, updated_at)
     VALUES (?, ?, ?, 'ai_credits', ?, ?)
@@ -109,12 +111,35 @@ export async function consumeAiCredits(learner: LearnerIdentity, action?: Billab
       quantity = entitlement_usage.quantity + excluded.quantity,
       updated_at = excluded.updated_at
     WHERE entitlement_usage.quantity + excluded.quantity <= ?`)
-    .bind(crypto.randomUUID(), learner.userId, month, credits, nowSeconds(), limit).run();
+    .bind(crypto.randomUUID(), learner.userId, month, credits, nowSeconds(), totalLimit).run();
   if (!result.meta.changes) throw new BillingLimitError("monthly_credit_limit");
   const row = await db.prepare(`SELECT quantity FROM entitlement_usage
     WHERE user_id = ? AND month = ? AND metric = 'ai_credits'`)
     .bind(learner.userId, month).first<{ quantity: number }>();
-  return { planId, creditsUsed: Number(row?.quantity ?? credits), creditsLimit: limit, charged: credits };
+  return { planId, creditsUsed: Number(row?.quantity ?? credits), creditsLimit: totalLimit, charged: credits };
+}
+
+async function bonusCredits(db: D1Database, userId: string, month: string) {
+  const row = await db.prepare("SELECT COALESCE(SUM(credits), 0) AS bonus FROM credit_grants WHERE user_id = ? AND month = ?")
+    .bind(userId, month).first<{ bonus: number }>();
+  return Number(row?.bonus ?? 0);
+}
+
+/** Adds extra credits for the current month. Returns false if this (reason, reference) was already granted. */
+export async function grantCredits(db: D1Database, grant: { userId: string; credits: number; reason: string; reference: string; now?: number }) {
+  const now = grant.now ?? nowSeconds();
+  const month = new Date(now * 1000).toISOString().slice(0, 7);
+  const result = await db.prepare(`INSERT INTO credit_grants (id, user_id, month, credits, reason, reference, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, reason, reference) DO NOTHING`)
+    .bind(crypto.randomUUID(), grant.userId, month, grant.credits, grant.reason, grant.reference, now).run();
+  return Boolean(result.meta.changes);
+}
+
+/** Free-trial length for first-time subscribers (ONELEARN_TRIAL_DAYS, default 7; 0 disables). */
+export function trialDays() {
+  const raw = process.env.ONELEARN_TRIAL_DAYS?.trim();
+  const parsed = raw === undefined || raw === "" ? 7 : Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(30, Math.floor(parsed)) : 0;
 }
 
 export async function refundAiCredits(learner: LearnerIdentity, action?: BillableAction) {
@@ -157,11 +182,12 @@ export async function getBillingSummary(learner: LearnerIdentity) {
       configured: false,
       plan: PLAN_CATALOG.free,
       subscription: null,
-      usage: { month, aiCreditsUsed: used, aiCreditsRemaining: Math.max(0, PLAN_CATALOG.free.aiCredits - used), sources: 0, sourceBytes: 0 },
+      usage: { month, aiCreditsUsed: used, aiCreditsRemaining: Math.max(0, PLAN_CATALOG.free.aiCredits - used), bonusCredits: 0, sources: 0, sourceBytes: 0 },
+      trialDays: 0,
       invoices: [],
     };
   }
-  const [subscriptionResult, usageResult, sourcesResult, customerResult, invoicesResult] = await db.batch([
+  const [subscriptionResult, usageResult, sourcesResult, customerResult, invoicesResult, bonusResult, historyResult] = await db.batch([
     db.prepare(`SELECT plan_id AS planId, billing_interval AS billingInterval, status,
         cancel_at_period_end AS cancelAtPeriodEnd, current_period_end AS currentPeriodEnd
       FROM subscriptions WHERE user_id = ?
@@ -174,7 +200,11 @@ export async function getBillingSummary(learner: LearnerIdentity) {
     db.prepare(`SELECT id, amount_paid AS amountPaid, currency, status,
         hosted_invoice_url AS hostedInvoiceUrl, paid_at AS paidAt, created_at AS createdAt
       FROM billing_invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 6`).bind(learner.userId),
+    db.prepare("SELECT COALESCE(SUM(credits), 0) AS bonus FROM credit_grants WHERE user_id = ? AND month = ?").bind(learner.userId, month),
+    db.prepare("SELECT COUNT(*) AS count FROM subscriptions WHERE user_id = ?").bind(learner.userId),
   ]);
+  const bonus = Number((bonusResult.results?.[0] as { bonus?: number } | undefined)?.bonus ?? 0);
+  const hasSubscribedBefore = Number((historyResult.results?.[0] as { count?: number } | undefined)?.count ?? 0) > 0;
   const subscription = subscriptionResult.results?.[0] as { planId?: string; billingInterval?: string; status?: string; cancelAtPeriodEnd?: number; currentPeriodEnd?: number } | undefined;
   const planId = subscription && isPaidPlanId(subscription.planId) && activeStatuses.has(subscription.status ?? "") ? subscription.planId : "free";
   const plan = PLAN_CATALOG[planId];
@@ -195,10 +225,13 @@ export async function getBillingSummary(learner: LearnerIdentity) {
     usage: {
       month,
       aiCreditsUsed: creditsUsed,
-      aiCreditsRemaining: Math.max(0, plan.aiCredits - creditsUsed),
+      aiCreditsRemaining: Math.max(0, plan.aiCredits + bonus - creditsUsed),
+      bonusCredits: bonus,
       sources: Number(sources?.sourceCount ?? 0),
       sourceBytes: Number(sources?.sourceBytes ?? 0),
     },
+    // Only learners who have never had a subscription get a trial.
+    trialDays: learner.mode !== "device" && !hasSubscribedBefore ? trialDays() : 0,
     invoices: invoicesResult.results ?? [],
   };
 }

@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { type Locale, pick } from "@/lib/onelearn/i18n";
 import { clerkSignOut } from "@/lib/onelearn/clerk-browser";
+import { track } from "@/lib/onelearn/analytics";
 import { oneLearnFetch, signIn } from "./client";
 import type { BillingPayload, BillingPlan } from "./types";
 
@@ -39,6 +40,7 @@ export function BillingView({ locale }: { locale: Locale }) {
 
   const checkout = async (planId: "personal" | "pro") => {
     setBusy(planId); setError(""); setNotice("");
+    track("checkout_started", { planId, interval, trial: (data?.billing.trialDays ?? 0) > 0 });
     try {
       const response = await oneLearnFetch("/api/billing/checkout", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -71,7 +73,10 @@ export function BillingView({ locale }: { locale: Locale }) {
 
   if (!data && !error) return <article className="ai-empty-state"><LoaderCircle className="animate-spin" /><h2>{l("正在读取套餐与用量", "Loading plans and usage")}</h2></article>;
   const currentPlan = data?.billing.plan;
-  const creditsPercent = currentPlan ? Math.min(100, Math.round((data!.billing.usage.aiCreditsUsed / currentPlan.aiCredits) * 100)) : 0;
+  const bonusCredits = data?.billing.usage.bonusCredits ?? 0;
+  const totalCredits = (currentPlan?.aiCredits ?? 0) + bonusCredits;
+  const creditsPercent = totalCredits ? Math.min(100, Math.round((data!.billing.usage.aiCreditsUsed / totalCredits) * 100)) : 0;
+  const trialDays = data?.billing.trialDays ?? 0;
   const planFeatures = (plan: BillingPlan) => [
     l(`每月 ${plan.aiCredits.toLocaleString()} AI 点数`, `${plan.aiCredits.toLocaleString()} AI credits / month`),
     l(`约 ${plan.courseEquivalent} 门新课程`, `About ${plan.courseEquivalent} new courses`),
@@ -81,7 +86,7 @@ export function BillingView({ locale }: { locale: Locale }) {
   return <div className="billing-page animate-in fade-in duration-500">
     <section className="billing-hero">
       <div><div className="eyebrow"><Crown className="size-3.5" /> ONELEARN MEMBERSHIP</div><h1>{l("选择与你目标匹配的学习算力。", "Choose the learning power that fits your goal.")}</h1><p>{l("按月获得 AI 点数，用于课程生成、课节扩展、导师问答和资料索引；不会按 Token 给你出账。", "Receive monthly AI credits for course generation, lesson expansion, tutoring, and source indexing—never a surprise token bill.")}</p></div>
-      {data && <article className="billing-usage-card"><div className="flex items-center justify-between"><span>{l("当前套餐", "CURRENT PLAN")}</span><strong>{locale === "zh" ? data.billing.plan.nameZh : data.billing.plan.nameEn}</strong></div><div className="billing-credit-number"><b>{data.billing.usage.aiCreditsRemaining.toLocaleString()}</b><span>/ {data.billing.plan.aiCredits.toLocaleString()} {l("点剩余", "left")}</span></div><Progress value={creditsPercent} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><div className="billing-usage-meta"><span><Gauge />{l(`本月已用 ${data.billing.usage.aiCreditsUsed}`, `${data.billing.usage.aiCreditsUsed} used this month`)}</span><span><FileText />{l(`${data.billing.usage.sources}/${data.billing.plan.sourceCount} 份资料`, `${data.billing.usage.sources}/${data.billing.plan.sourceCount} sources`)}</span></div>{data.billing.subscription?.canManage && <Button disabled={busy === "manage"} onClick={() => void manage()} variant="ghost" className="billing-manage">{busy === "manage" ? <LoaderCircle className="animate-spin" /> : <Settings />}{l("管理订阅与付款方式", "Manage subscription & payment")}</Button>}</article>}
+      {data && <article className="billing-usage-card"><div className="flex items-center justify-between"><span>{l("当前套餐", "CURRENT PLAN")}</span><strong>{locale === "zh" ? data.billing.plan.nameZh : data.billing.plan.nameEn}</strong></div><div className="billing-credit-number"><b>{data.billing.usage.aiCreditsRemaining.toLocaleString()}</b><span>/ {totalCredits.toLocaleString()} {l("点剩余", "left")}</span></div>{bonusCredits > 0 && <p className="text-xs text-emerald-300">{l(`含本月邀请奖励 +${bonusCredits}`, `Includes +${bonusCredits} invite bonus this month`)}</p>}<Progress value={creditsPercent} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><div className="billing-usage-meta"><span><Gauge />{l(`本月已用 ${data.billing.usage.aiCreditsUsed}`, `${data.billing.usage.aiCreditsUsed} used this month`)}</span><span><FileText />{l(`${data.billing.usage.sources}/${data.billing.plan.sourceCount} 份资料`, `${data.billing.usage.sources}/${data.billing.plan.sourceCount} sources`)}</span></div>{data.billing.subscription?.canManage && <Button disabled={busy === "manage"} onClick={() => void manage()} variant="ghost" className="billing-manage">{busy === "manage" ? <LoaderCircle className="animate-spin" /> : <Settings />}{l("管理订阅与付款方式", "Manage subscription & payment")}</Button>}</article>}
     </section>
 
     {notice && <div className="billing-notice"><Check />{notice}</div>}
@@ -101,7 +106,8 @@ export function BillingView({ locale }: { locale: Locale }) {
           <div className="pricing-value"><strong>¥{price}</strong><span>/{interval === "month" ? l("月", "mo") : l("年", "yr")}</span></div>
           {interval === "year" && plan.id !== "free" && <small className="pricing-saving">{l(`相当于 ¥${Math.round((price ?? 0) / 12)}/月`, `Equivalent to ¥${Math.round((price ?? 0) / 12)}/month`)}</small>}
           <ul>{planFeatures(plan).map((feature) => <li key={feature}><Check />{feature}</li>)}</ul>
-          {isCurrent ? <Button disabled className="pricing-button is-current"><Check />{l("当前套餐", "Current plan")}</Button> : plan.id === "free" ? <Button disabled variant="outline" className="pricing-button">{l("永久免费", "Free forever")}</Button> : <Button disabled={Boolean(busy)} onClick={() => void checkout(plan.id as "personal" | "pro")} className="pricing-button">{busy === plan.id ? <LoaderCircle className="animate-spin" /> : <CreditCard />}{l("安全开通", "Continue to secure checkout")}</Button>}
+          {isCurrent ? <Button disabled className="pricing-button is-current"><Check />{l("当前套餐", "Current plan")}</Button> : plan.id === "free" ? <Button disabled variant="outline" className="pricing-button">{l("永久免费", "Free forever")}</Button> : <Button disabled={Boolean(busy)} onClick={() => void checkout(plan.id as "personal" | "pro")} className="pricing-button">{busy === plan.id ? <LoaderCircle className="animate-spin" /> : <CreditCard />}{trialDays ? l(`免费试用 ${trialDays} 天`, `Start ${trialDays}-day free trial`) : l("安全开通", "Continue to secure checkout")}</Button>}
+          {!isCurrent && plan.id !== "free" && trialDays > 0 && <small className="mt-2 block text-center text-xs text-slate-500">{l("试用期内随时取消不扣费，到期后按所选周期续费", "Cancel anytime during the trial at no charge; it then renews at the chosen interval")}</small>}
         </article>;
       })}
     </section>

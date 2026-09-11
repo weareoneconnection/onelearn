@@ -43,7 +43,9 @@ export type BillingPayload = {
     configured: boolean;
     plan: BillingPlan;
     subscription: { planId: string; billingInterval: "month" | "year"; status: string; cancelAtPeriodEnd: boolean; currentPeriodEnd: number | null; canManage: boolean } | null;
-    usage: { month: string; aiCreditsUsed: number; aiCreditsRemaining: number; sources: number; sourceBytes: number };
+    usage: { month: string; aiCreditsUsed: number; aiCreditsRemaining: number; bonusCredits?: number; sources: number; sourceBytes: number };
+    /** Free-trial days offered at checkout; 0 when not eligible. */
+    trialDays?: number;
     invoices: Array<{ id: string; amountPaid: number; currency: string; status: string; hostedInvoiceUrl: string | null; paidAt: number | null; createdAt: number }>;
   };
 };
