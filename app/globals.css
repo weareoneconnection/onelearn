@@ -263,3 +263,10 @@ button { cursor: pointer; } button:disabled { cursor: not-allowed; }
 .guide-back { margin-top: 2.5rem !important; }
 .guide-back a { color: #67e8f9; }
 @media (max-width: 640px) { .guide-toc ol { columns: 1; } }
+
+/* Grid cards must never be wider than their track: a single-line (nowrap) summary
+   otherwise sets the card's minimum width and pushes the page past a phone screen. */
+.academy-card, .course-card, .dynamic-card { min-width: 0; }
+@media (max-width: 640px) {
+  .academy-grid, .course-grid, .dynamic-grid { grid-template-columns: minmax(0, 1fr); }
+}

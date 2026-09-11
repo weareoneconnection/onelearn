@@ -58,10 +58,11 @@ test("bottom tab bar navigates on phones", async ({ page }, testInfo) => {
 test("page never scrolls sideways on phones", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "Phone layout check");
   // Wait for rendered content rather than network idle: the auth script keeps a session poll open.
-  for (const [path, marker] of [["/", "今日任务"], ["/?view=catalog", "ONELEARN COURSE UNIVERSE"], ["/?view=billing", "ONELEARN MEMBERSHIP"], ["/terms", "OneLearn 用户协议"]]) {
+  for (const [path, marker] of [["/", "今日任务"], ["/?view=catalog", "ONELEARN COURSE UNIVERSE"], ["/?view=path", "演示知识图谱"], ["/?view=library", "用你的资料学习"], ["/?view=billing", "ONELEARN MEMBERSHIP"], ["/guide", "OneLearn 使用手册"], ["/terms", "OneLearn 用户协议"]]) {
     await page.goto(path);
     await expect(page.getByText(marker).first()).toBeVisible();
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    // Compare against clientWidth: mobile browsers widen innerWidth to fit overflowing content.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `horizontal overflow on ${path}`).toBeLessThanOrEqual(0);
   }
 });
