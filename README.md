@@ -81,10 +81,20 @@ docs/
 
 ## 构建生产版本
 
+Sites / Cloudflare Worker：
+
 ```bash
 npm run build
 npm run start
 ```
+
+Vercel 使用仓库中的 `vercel.json` 自动执行原生 Next.js 构建：
+
+```bash
+npm run build:vercel
+```
+
+Vercel 项目无需手动填写 Output Directory。请将 Framework Preset 保持为 Next.js，并在项目环境变量中配置 `OPENAI_API_KEY`；可选配置 `OPENAI_MODEL`。
 
 ## 从原型进入生产
 
