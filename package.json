@@ -11,10 +11,12 @@
     "build": "node scripts/run-framework.mjs build",
     "build:vercel": "next build --webpack",
     "start": "npm run db:migrate:local && node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .e2e-app --ignore-pattern test-results --ignore-pattern playwright-report",
     "test": "node --no-warnings --import ./tests/helpers/register.mjs --test \"tests/**/*.test.mjs\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate:turso": "drizzle-kit migrate --config drizzle.turso.config.ts",
+    "db:backup:turso": "node scripts/backup-turso.mjs",
+    "test:e2e": "playwright test",
     "db:migrate:local": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 migrations apply site-creator-d1 --local --persist-to .wrangler/state --config .openai/wrangler.local.json"
   },
   "dependencies": {
@@ -50,6 +52,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "4.20260515.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

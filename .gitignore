@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+/.e2e-app/
+/test-results/
+/playwright-report/
+
+# database backups contain personal data; never commit them
+/backups/
 
 # next.js
 /.next/
