@@ -6,7 +6,7 @@ import { identifyLearner, track } from "@/lib/onelearn/analytics";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { academies, type CatalogEntry, courseCatalog, searchCatalog } from "@/lib/onelearn/catalog";
 import { academyName, courseTitleEn, formatCatalogNumber, groupName, levelName, type Locale, pick } from "@/lib/onelearn/i18n";
 import type { GeneratedCourseBundle } from "@/lib/onelearn/generated-course";
@@ -27,6 +27,12 @@ import { courseProgress } from "@/components/onelearn/progress";
 import { ProofView } from "@/components/onelearn/proof";
 import type { GenerationState, LearnerIdentity, LearnerStats, MasteryOverview, View, WebModelContext } from "@/components/onelearn/types";
 import { Brand, LocaleSwitch } from "@/components/onelearn/ui";
+
+/** Sidebar nav item that also closes the phone sheet once a destination is picked. */
+function SidebarNavButton({ onSelect, ...props }: Omit<Parameters<typeof SidebarMenuButton>[0], "onClick" | "onSelect"> & { onSelect: () => void }) {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return <SidebarMenuButton {...props} onClick={() => { onSelect(); if (isMobile) setOpenMobile(false); }} />;
+}
 
 export function OneLearnApp() {
   const [view, setView] = useState<View>("dashboard");
@@ -248,6 +254,8 @@ export function OneLearnApp() {
     }
     setView(next);
     window.localStorage.setItem("onelearn-view", next);
+    // Each section starts at its top instead of inheriting the previous page's scroll.
+    window.scrollTo({ top: 0 });
   };
   const startCourse = async (course: CatalogEntry, goal = "", force = false) => {
     setSelectedCourse(null);
@@ -332,9 +340,9 @@ export function OneLearnApp() {
 
   return <SidebarProvider defaultOpen>
     <Sidebar collapsible="icon" className="border-r border-white/7 bg-[#08101c]" variant="sidebar">
-      <SidebarHeader className="p-4"><Brand /></SidebarHeader>
-      <SidebarContent className="px-2"><SidebarGroup><SidebarGroupContent><SidebarMenu>{navItems.map((item) => { const label = pick(locale, item.zh, item.en); return <SidebarMenuItem key={item.id}><SidebarMenuButton isActive={view === item.id} tooltip={label} onClick={() => navigate(item.id)} className="h-10 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white data-[active=true]:bg-cyan-300/10 data-[active=true]:text-cyan-200"><item.icon /><span>{label}</span></SidebarMenuButton></SidebarMenuItem>; })}</SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
-      <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><AccountMenu locale={locale} identity={identity} emailReminders={emailReminders} onToggleReminders={toggleReminders} onNavigate={navigate} onFeedback={() => setFeedbackOpen(true)} onInvite={() => setInviteOpen(true)} /><a href="https://www.oneailabs.ai/" target="_blank" rel="noopener" className="px-2 text-[11px] text-slate-600 transition-colors hover:text-slate-400 group-data-[collapsible=icon]:hidden">Powered by OneAI Labs</a></SidebarFooter>
+      <SidebarHeader className="p-4 pt-[calc(1rem+env(safe-area-inset-top))]"><Brand /></SidebarHeader>
+      <SidebarContent className="px-2"><SidebarGroup><SidebarGroupContent><SidebarMenu>{navItems.filter((item) => item.id !== "operations" || identity?.admin).map((item) => { const label = pick(locale, item.zh, item.en); return <SidebarMenuItem key={item.id}><SidebarNavButton isActive={view === item.id} tooltip={label} onSelect={() => navigate(item.id)} className="h-10 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white data-[active=true]:bg-cyan-300/10 data-[active=true]:text-cyan-200"><item.icon /><span>{label}</span></SidebarNavButton></SidebarMenuItem>; })}</SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
+      <SidebarFooter className="gap-3 border-t border-white/7 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><AccountMenu locale={locale} identity={identity} emailReminders={emailReminders} onToggleReminders={toggleReminders} onNavigate={navigate} onFeedback={() => setFeedbackOpen(true)} onInvite={() => setInviteOpen(true)} /><a href="https://www.oneailabs.ai/" target="_blank" rel="noopener" className="px-2 text-[11px] text-slate-600 transition-colors hover:text-slate-400 group-data-[collapsible=icon]:hidden">Powered by OneAI Labs</a></SidebarFooter>
     </Sidebar>
     <SidebarInset className="min-w-0 bg-[#060b13]">
       <header className="sticky top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top))] items-center pt-[env(safe-area-inset-top)] gap-3 border-b border-white/7 bg-[#060b13]/90 px-4 backdrop-blur-xl sm:px-7"><SidebarTrigger aria-label={l("切换侧边栏", "Toggle sidebar")} className="size-10 text-slate-400 hover:bg-white/5 hover:text-white md:size-7" /><div className="h-5 w-px bg-white/8" /><span className="min-w-0 truncate text-sm text-slate-400">{title}</span><div className="ml-auto flex items-center gap-2"><LocaleSwitch locale={locale} onChange={changeLocale} /><button onClick={() => setCommandOpen(true)} className="command-button"><Search /><span className="hidden sm:inline">{l("全局搜索", "Search anything")}</span><kbd className="hidden lg:inline">⌘ K</kbd></button><Button variant="ghost" size="icon-sm" aria-label={l("帮助与反馈", "Help & feedback")} onClick={() => setFeedbackOpen(true)} className="size-10 text-slate-500 hover:bg-white/5 hover:text-white md:size-8"><CircleHelp /></Button></div></header>

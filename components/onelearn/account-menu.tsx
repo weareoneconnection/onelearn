@@ -6,11 +6,15 @@ import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMe
 import { clerkSignOut } from "@/lib/onelearn/clerk-browser";
 import { type Locale, pick } from "@/lib/onelearn/i18n";
 import { signIn } from "./client";
+import { useSidebar } from "@/components/ui/sidebar";
 import type { LearnerIdentity, View } from "./types";
 
 /** Sidebar account entry: shows who is signed in and where their data lives, with account actions. */
 export function AccountMenu({ locale, identity, emailReminders, onToggleReminders, onNavigate, onFeedback, onInvite }: { locale: Locale; identity: LearnerIdentity | null; emailReminders: boolean | null; onToggleReminders: (enabled: boolean) => void; onNavigate: (view: View) => void; onFeedback: () => void; onInvite: () => void }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
+  const { isMobile, setOpenMobile } = useSidebar();
+  // On phones the sidebar is a sheet; close it once a destination is picked.
+  const go = (view: View) => { onNavigate(view); if (isMobile) setOpenMobile(false); };
   const signedIn = identity !== null && identity.mode !== "device";
   const name = signedIn ? identity.displayName : l("未登录", "Not signed in");
   const status = signedIn ? l("云端学习档案", "Cloud learning profile") : l("仅保存在本设备", "Saved on this device only");
@@ -37,9 +41,9 @@ export function AccountMenu({ locale, identity, emailReminders, onToggleReminder
       </DropdownMenuLabel>
       <DropdownMenuSeparator className="bg-white/8" />
       {!signedIn && <DropdownMenuItem onSelect={() => signIn("/")}><LogIn />{l("登录并跨设备同步", "Sign in and sync")}</DropdownMenuItem>}
-      <DropdownMenuItem onSelect={() => onNavigate("billing")}><CreditCard />{l("套餐与账单", "Plans & billing")}</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => go("billing")}><CreditCard />{l("套餐与账单", "Plans & billing")}</DropdownMenuItem>
       {signedIn && <DropdownMenuItem onSelect={onInvite}><Gift />{l("邀请好友 · 各得 50 点", "Invite friends · +50 credits each")}</DropdownMenuItem>}
-      {identity?.admin && <DropdownMenuItem onSelect={() => onNavigate("operations")}><BarChart3 />{l("运营中心", "Operations center")}</DropdownMenuItem>}
+      {identity?.admin && <DropdownMenuItem onSelect={() => go("operations")}><BarChart3 />{l("运营中心", "Operations center")}</DropdownMenuItem>}
       {signedIn && emailReminders !== null && <DropdownMenuCheckboxItem checked={emailReminders} onCheckedChange={(checked) => onToggleReminders(checked === true)} onSelect={(event) => event.preventDefault()}><Mail className="mr-2 size-4" />{l("复习提醒邮件", "Review reminder emails")}</DropdownMenuCheckboxItem>}
       <DropdownMenuItem onSelect={onFeedback}><CircleHelp />{l("帮助与反馈", "Help & feedback")}</DropdownMenuItem>
       <DropdownMenuItem asChild><Link href={locale === "zh" ? "/guide" : "/guide?lang=en"} target="_blank"><BookOpen />{l("使用手册", "User guide")}</Link></DropdownMenuItem>
