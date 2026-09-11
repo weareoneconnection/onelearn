@@ -11,7 +11,7 @@
     "build": "node scripts/run-framework.mjs build",
     "build:vercel": "next build --webpack",
     "start": "npm run db:migrate:local && node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .e2e-app --ignore-pattern test-results --ignore-pattern playwright-report",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .e2e-app --ignore-pattern test-results --ignore-pattern playwright-report --ignore-pattern ios",
     "test": "node --no-warnings --import ./tests/helpers/register.mjs --test \"tests/**/*.test.mjs\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate:turso": "drizzle-kit migrate --config drizzle.turso.config.ts",
