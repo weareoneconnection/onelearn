@@ -364,6 +364,7 @@ export async function recordAiRun(args: {
     : args.purpose === "lesson" ? "lesson_generation"
     : args.purpose === "tutor" ? "tutor_turn"
     : args.purpose === "source_index" ? "source_index"
+    : args.purpose === "diagnostic" ? "diagnostic"
     : undefined;
   if (args.status !== "success" && billableAction) await refundAiCredits(args.learner, billableAction).catch(() => undefined);
   const key = `${args.learner.userId}:${today()}`;

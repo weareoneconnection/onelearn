@@ -4,7 +4,7 @@ import type { LearnerIdentity } from "./persistence";
 export type PlanId = "free" | "personal" | "pro" | "team";
 export type PaidPlanId = Exclude<PlanId, "free">;
 export type BillingInterval = "month" | "year";
-export type BillableAction = "course_generation" | "lesson_generation" | "tutor_turn" | "source_index";
+export type BillableAction = "course_generation" | "lesson_generation" | "tutor_turn" | "source_index" | "diagnostic";
 export type BillingLimitCode = "monthly_credit_limit" | "source_limit" | "source_storage_limit";
 
 export type PlanDefinition = {
@@ -44,6 +44,7 @@ const ACTION_CREDITS: Record<BillableAction, number> = {
   lesson_generation: 6,
   tutor_turn: 1,
   source_index: 4,
+  diagnostic: 4,
 };
 
 const activeStatuses = new Set(["active", "trialing"]);

@@ -2,19 +2,21 @@ import { flattenLessons, type GeneratedCourseBundle, type LessonOutline } from "
 import type { MasteryOverview, MasteryRecord } from "./types";
 
 export type LessonProgress = LessonOutline & { record: MasteryRecord | null; passed: boolean; unlocked: boolean };
-export type ModuleProgress = { index: number; title: string; lessons: LessonProgress[]; score: number; mastered: number; passed: boolean; unlocked: boolean };
+export type ModuleProgress = { index: number; title: string; lessons: LessonProgress[]; score: number; mastered: number; passed: boolean; unlocked: boolean; known: boolean };
 
 /**
  * Course progress from mastery records. A lesson is "passed" once it has an unassisted
- * correct answer; a module unlocks when every lesson of the previous module is passed.
+ * correct answer; a module unlocks when every lesson of the previous module is passed,
+ * or when the placement diagnostic showed the previous module is already known.
  */
 export function courseProgress(bundle: GeneratedCourseBundle, mastery: MasteryOverview | null) {
   const courseVersionId = bundle.generation.courseVersionId;
   const recordOf = (lessonId: string) => mastery?.records.find((record) => record.courseVersionId === courseVersionId && record.nodeKey === lessonId) ?? null;
+  const knownModules = new Set(courseVersionId ? mastery?.placements?.[courseVersionId] ?? [] : []);
   const outline = flattenLessons(bundle.curriculum);
   const modules: ModuleProgress[] = [];
   bundle.curriculum.modules.forEach((module, index) => {
-    const unlocked = index === 0 || modules[index - 1].passed;
+    const unlocked = index === 0 || modules[index - 1].passed || modules[index - 1].known;
     const lessons = outline.filter((lesson) => lesson.moduleIndex === index).map((lesson) => {
       const record = recordOf(lesson.id);
       return { ...lesson, record, passed: (record?.unassistedPasses ?? 0) > 0, unlocked };
@@ -27,10 +29,12 @@ export function courseProgress(bundle: GeneratedCourseBundle, mastery: MasteryOv
       mastered: lessons.filter((lesson) => lesson.record?.mastered).length,
       passed: lessons.length > 0 && lessons.every((lesson) => lesson.passed),
       unlocked,
+      known: knownModules.has(index),
     });
   });
   const lessons = modules.flatMap((module) => module.lessons);
-  const recommended = lessons.find((lesson) => lesson.unlocked && !lesson.passed)
+  const recommended = lessons.find((lesson) => lesson.unlocked && !lesson.passed && !knownModules.has(lesson.moduleIndex))
+    ?? lessons.find((lesson) => lesson.unlocked && !lesson.passed)
     ?? lessons.find((lesson) => lesson.unlocked && !lesson.record?.mastered)
     ?? lessons[0];
   return { modules, lessons, recommendedId: recommended?.id ?? bundle.curriculum.firstLesson.id };

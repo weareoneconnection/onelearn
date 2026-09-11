@@ -54,6 +54,13 @@ export function OneLearnApp() {
   const [storage, setStorage] = useState<"durable" | "ephemeral">("ephemeral");
   // The lesson being studied. Without an explicit choice, the recommended next lesson is used.
   const [lessonSelection, setLessonSelection] = useState<{ course: string; id: string } | null>(null);
+  const [emailReminders, setEmailReminders] = useState<boolean | null>(null);
+  const toggleReminders = (enabled: boolean) => {
+    setEmailReminders(enabled);
+    void oneLearnFetch("/api/workspace", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale, emailReminders: enabled }) })
+      .then((response) => { if (!response.ok) setEmailReminders(!enabled); })
+      .catch(() => setEmailReminders(!enabled));
+  };
   const lessonProgress = useMemo(() => generatedCourse ? courseProgress(generatedCourse, mastery) : null, [generatedCourse, mastery]);
   const currentLessonId = generatedCourse && lessonSelection?.course === generatedCourse.generation.responseId
     ? lessonSelection.id
@@ -95,9 +102,11 @@ export function OneLearnApp() {
         if (!response.ok) return;
         const payload = await response.json() as {
           identity?: LearnerIdentity;
+          preferences?: { emailReminders?: boolean | null };
           workspace?: { storage?: "durable" | "ephemeral"; locale?: Locale; course?: Partial<CatalogEntry> | null; bundle?: GeneratedCourseBundle | null; stats?: LearnerStats };
         };
         if (payload.identity) setIdentity(payload.identity);
+        if (typeof payload.preferences?.emailReminders === "boolean") setEmailReminders(payload.preferences.emailReminders);
         if (payload.workspace?.stats) setLearnerStats(payload.workspace.stats);
         setStorage(payload.workspace?.storage ?? "ephemeral");
         if (payload.workspace?.locale === "zh" || payload.workspace?.locale === "en") {
@@ -303,7 +312,7 @@ export function OneLearnApp() {
     <Sidebar collapsible="icon" className="border-r border-white/7 bg-[#08101c]" variant="sidebar">
       <SidebarHeader className="p-4"><Brand /></SidebarHeader>
       <SidebarContent className="px-2"><SidebarGroup><SidebarGroupContent><SidebarMenu>{navItems.map((item) => { const label = pick(locale, item.zh, item.en); return <SidebarMenuItem key={item.id}><SidebarMenuButton isActive={view === item.id} tooltip={label} onClick={() => navigate(item.id)} className="h-10 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white data-[active=true]:bg-cyan-300/10 data-[active=true]:text-cyan-200"><item.icon /><span>{label}</span></SidebarMenuButton></SidebarMenuItem>; })}</SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
-      <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><AccountMenu locale={locale} identity={identity} onNavigate={navigate} onFeedback={() => setFeedbackOpen(true)} /></SidebarFooter>
+      <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><AccountMenu locale={locale} identity={identity} emailReminders={emailReminders} onToggleReminders={toggleReminders} onNavigate={navigate} onFeedback={() => setFeedbackOpen(true)} /></SidebarFooter>
     </Sidebar>
     <SidebarInset className="min-w-0 bg-[#060b13]">
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/7 bg-[#060b13]/90 px-4 backdrop-blur-xl sm:px-7"><SidebarTrigger aria-label={l("切换侧边栏", "Toggle sidebar")} className="size-10 text-slate-400 hover:bg-white/5 hover:text-white md:size-7" /><div className="h-5 w-px bg-white/8" /><span className="min-w-0 truncate text-sm text-slate-400">{title}</span><div className="ml-auto flex items-center gap-2"><LocaleSwitch locale={locale} onChange={changeLocale} /><button onClick={() => setCommandOpen(true)} className="command-button"><Search /><span className="hidden sm:inline">{l("全局搜索", "Search anything")}</span><kbd className="hidden lg:inline">⌘ K</kbd></button><Button variant="ghost" size="icon-sm" aria-label={l("帮助与反馈", "Help & feedback")} onClick={() => setFeedbackOpen(true)} className="size-10 text-slate-500 hover:bg-white/5 hover:text-white md:size-8"><CircleHelp /></Button></div></header>
@@ -312,7 +321,7 @@ export function OneLearnApp() {
         {generationState.status === "error" && <div className="ai-error-banner" role="alert"><TriangleAlert /><div><strong>{l("课程生成未完成", "Course generation did not complete")}</strong><span>{generationState.message}</span></div><button onClick={() => setGenerationState({ status: "idle" })} aria-label={l("关闭错误提示", "Dismiss error")}><X /></button></div>}
         {view === "dashboard" && <Dashboard onNavigate={navigate} locale={locale} identity={identity} stats={learnerStats} storage={storage} mastery={mastery} />}
         {view === "catalog" && <CourseUniverse selectedCourse={selectedCourse} onSelectCourse={setSelectedCourse} onStartCourse={(course, goal) => void startCourse(course, goal)} locale={locale} generationState={generationState} />}
-        {view === "path" && <KnowledgeMap onNavigate={navigate} onOpenLesson={openLesson} activeCourse={activeCourse} bundle={generatedCourse} locale={locale} onRegenerate={regenerateCourse} mastery={mastery} />}
+        {view === "path" && <KnowledgeMap onNavigate={navigate} onOpenLesson={openLesson} onMasteryChange={refreshMastery} activeCourse={activeCourse} bundle={generatedCourse} locale={locale} onRegenerate={regenerateCourse} mastery={mastery} />}
         {view === "learn" && <LearningRoom key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}-${currentLessonId ?? "first"}`} locale={locale} bundle={generatedCourse} lessonId={currentLessonId} mastery={mastery} onOpenLesson={openLesson} onNavigate={navigate} />}
         {view === "practice" && <PracticeView key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}-${currentLessonId ?? "first"}`} locale={locale} bundle={generatedCourse} lessonId={currentLessonId} onAnswered={refreshMastery} onNavigate={navigate} />}
         {view === "review" && <ReviewView locale={locale} bundle={generatedCourse} mastery={mastery} onAnswered={refreshMastery} onNavigate={navigate} onOpenLesson={openLesson} />}

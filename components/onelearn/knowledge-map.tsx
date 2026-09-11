@@ -1,17 +1,20 @@
 "use client";
 
-import { Check, Circle, CircleCheck, LockKeyhole, Orbit, Play, RefreshCw, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Check, Circle, CircleCheck, LockKeyhole, Orbit, Play, RefreshCw, Sparkles, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CatalogEntry } from "@/lib/onelearn/catalog";
 import { courseTitleEn, type Locale, pick } from "@/lib/onelearn/i18n";
 import type { GeneratedCourseBundle } from "@/lib/onelearn/generated-course";
+import { DiagnosticDialog } from "./diagnostic-dialog";
 import { courseProgress } from "./progress";
 import type { MasteryOverview, View } from "./types";
 import { PageHeading } from "./ui";
 
-export function KnowledgeMap({ onNavigate, onOpenLesson, activeCourse, bundle, locale, onRegenerate, mastery }: { onNavigate: (view: View) => void; onOpenLesson: (lessonId: string) => void; activeCourse: CatalogEntry | null; bundle: GeneratedCourseBundle | null; locale: Locale; onRegenerate: () => void; mastery: MasteryOverview | null }) {
+export function KnowledgeMap({ onNavigate, onOpenLesson, onMasteryChange, activeCourse, bundle, locale, onRegenerate, mastery }: { onNavigate: (view: View) => void; onOpenLesson: (lessonId: string) => void; onMasteryChange: () => void; activeCourse: CatalogEntry | null; bundle: GeneratedCourseBundle | null; locale: Locale; onRegenerate: () => void; mastery: MasteryOverview | null }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
   const activeTitle = activeCourse ? (locale === "en" ? courseTitleEn(activeCourse.title) : activeCourse.title) : null;
   if (activeCourse && !bundle) return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker="OPENAI CURRICULUM ENGINE" title={activeTitle ?? activeCourse.title} detail={l("这门课程还没有生成当前语言版本。", "This course has not been generated in the current language yet.")}><Button onClick={onRegenerate} className="primary-pill"><Sparkles /> {l("用 OpenAI 生成", "Generate with OpenAI")}</Button></PageHeading><article className="ai-empty-state"><Orbit /><h2>{l("目录是入口，课程由大模型按需创建", "The catalog is the entry; the model creates the course on demand")}</h2><p>{l("OpenAI 会生成模块、课节、首课正文、检查问题与练习，并在当前设备缓存结果。", "OpenAI will generate modules, lessons, the first lesson content, checkpoints, and practice, then cache the result on this device.")}</p></article></div>;
 
@@ -30,7 +33,12 @@ export function KnowledgeMap({ onNavigate, onOpenLesson, activeCourse, bundle, l
   const recommended = progress.lessons.find((lesson) => lesson.id === progress.recommendedId);
   const lessonCount = progress.lessons.length;
   const passedCount = progress.lessons.filter((lesson) => lesson.passed).length;
+  const courseVersionId = bundle.generation.courseVersionId ?? null;
+  const placement = courseVersionId ? mastery?.placements?.[courseVersionId] : undefined;
+  const showDiagnostic = Boolean(courseVersionId) && mastery !== null && placement === undefined && passedCount === 0;
   return <div className="space-y-6 animate-in fade-in duration-500">
+    {showDiagnostic && <article className="billing-signin"><Target /><div><strong>{l("先做 3 分钟入门诊断", "Take a 3-minute placement diagnostic")}</strong><p>{l("每个模块一道题。已经会的模块直接解锁，不用从头学起（消耗 4 个 AI 点数）。", "One question per module. Modules you already know unlock, so you don't start from zero (4 AI credits).")}</p></div><button type="button" onClick={() => setDiagnosticOpen(true)} className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950">{l("开始诊断", "Start")}</button></article>}
+    {courseVersionId && <DiagnosticDialog locale={locale} courseVersionId={courseVersionId} moduleTitles={bundle.curriculum.modules.map((module) => module.title)} open={diagnosticOpen} onOpenChange={setDiagnosticOpen} onCompleted={onMasteryChange} />}
     <PageHeading kicker={`OPENAI · ${bundle.generation.model}${bundle.generation.version ? ` · V${bundle.generation.version}` : ""}`} title={bundle.curriculum.title} detail={`${bundle.curriculum.modules.length} ${l("个模块", "modules")} · ${lessonCount} ${l("节课", "lessons")} · ${l(`已通过 ${passedCount} 节`, `${passedCount} passed`)} · ${bundle.curriculum.estimatedHours} ${l("小时", "hours")}`}>
       <div className="flex flex-wrap gap-2"><Button onClick={onRegenerate} variant="outline" className="secondary-pill"><RefreshCw /> {l("生成新版本", "Generate new version")}</Button>{recommended && <Button onClick={() => onOpenLesson(recommended.id)} className="primary-pill"><Play /> {passedCount ? l("继续学习", "Continue") : l("开始学习", "Start learning")}</Button>}</div>
     </PageHeading>
@@ -39,7 +47,7 @@ export function KnowledgeMap({ onNavigate, onOpenLesson, activeCourse, bundle, l
       {progress.modules.map((module) => {
         const state = module.mastered === module.lessons.length ? "mastered" : !module.unlocked ? "locked" : module.lessons.some((lesson) => lesson.record) ? "active" : "ready";
         return <section key={module.index} className="w-full">
-          <div className={cn("knowledge-node w-full max-w-none", "node-" + state)}><span className="node-index">{state === "mastered" ? <Check /> : state === "locked" ? <LockKeyhole /> : module.index + 1}</span><span className="min-w-0 flex-1 text-left"><strong>{module.title}</strong><small>{module.unlocked ? l(`${module.lessons.length} 节课 · 已通过 ${module.lessons.filter((lesson) => lesson.passed).length} · 已掌握 ${module.mastered}`, `${module.lessons.length} lessons · ${module.lessons.filter((lesson) => lesson.passed).length} passed · ${module.mastered} mastered`) : l("完成上一模块各节练习后解锁", "Unlocks when every lesson in the previous module is passed")}</small></span><span className="node-score">{module.score}%</span></div>
+          <div className={cn("knowledge-node w-full max-w-none", "node-" + state)}><span className="node-index">{state === "mastered" ? <Check /> : state === "locked" ? <LockKeyhole /> : module.index + 1}</span><span className="min-w-0 flex-1 text-left"><strong>{module.title}</strong><small>{module.known && !module.passed ? l("入门诊断显示你已掌握，可以跳过", "The diagnostic shows you know this — feel free to skip") : module.unlocked ? l(`${module.lessons.length} 节课 · 已通过 ${module.lessons.filter((lesson) => lesson.passed).length} · 已掌握 ${module.mastered}`, `${module.lessons.length} lessons · ${module.lessons.filter((lesson) => lesson.passed).length} passed · ${module.mastered} mastered`) : l("完成上一模块各节练习后解锁", "Unlocks when every lesson in the previous module is passed")}</small></span><span className="node-score">{module.score}%</span></div>
           <ol className="mt-2 grid gap-1.5 pl-5 sm:pl-8">
             {module.lessons.map((lesson) => {
               const isNext = lesson.id === progress.recommendedId;

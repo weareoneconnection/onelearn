@@ -4,6 +4,8 @@ import { applyAnswer, applyTutorSignal, emptyMasteryState, evaluateMastery, type
 import { getOwnedCourseBundle, recordLearningEvent, type LearnerIdentity } from "./persistence";
 import { flattenLessons } from "./generated-course";
 import { getStoredLesson } from "./lessons";
+import { getEngagement } from "./engagement";
+import { getPlacements } from "./diagnostic";
 
 export class MasteryInputError extends Error {
   readonly code: "course_not_found" | "lesson_not_found" | "question_not_found";
@@ -149,8 +151,12 @@ export async function getMasteryOverview(learner: LearnerIdentity, now = nowSeco
     return { eventType: event.eventType, createdAt: event.createdAt, lessonTitle: typeof payload.lessonTitle === "string" ? payload.lessonTitle : typeof payload.node === "string" ? payload.node : null, correct: typeof payload.correct === "boolean" ? payload.correct : null };
   });
   const scored = records.filter((record) => record.attempts > 0 || record.lastEvidenceAt !== null);
+  const [engagement, placements] = await Promise.all([getEngagement(db, learner.userId, now), getPlacements(db, learner.userId)]);
   return {
     storage: db ? "durable" as const : "ephemeral" as const,
+    streak: engagement.streak,
+    week: engagement.week,
+    placements,
     records,
     due: records.filter((record) => record.due).sort((a, b) => (a.nextReviewAt ?? 0) - (b.nextReviewAt ?? 0)),
     summary: {

@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, ChevronsUpDown, CircleHelp, Cloud, CreditCard, FileText, LogIn, LogOut, Smartphone } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { BarChart3, ChevronsUpDown, CircleHelp, Cloud, CreditCard, FileText, LogIn, LogOut, Mail, Smartphone } from "lucide-react";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { clerkSignOut } from "@/lib/onelearn/clerk-browser";
 import { type Locale, pick } from "@/lib/onelearn/i18n";
 import { signIn } from "./client";
 import type { LearnerIdentity, View } from "./types";
 
 /** Sidebar account entry: shows who is signed in and where their data lives, with account actions. */
-export function AccountMenu({ locale, identity, onNavigate, onFeedback }: { locale: Locale; identity: LearnerIdentity | null; onNavigate: (view: View) => void; onFeedback: () => void }) {
+export function AccountMenu({ locale, identity, emailReminders, onToggleReminders, onNavigate, onFeedback }: { locale: Locale; identity: LearnerIdentity | null; emailReminders: boolean | null; onToggleReminders: (enabled: boolean) => void; onNavigate: (view: View) => void; onFeedback: () => void }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
   const signedIn = identity !== null && identity.mode !== "device";
   const name = signedIn ? identity.displayName : l("未登录", "Not signed in");
@@ -39,6 +39,7 @@ export function AccountMenu({ locale, identity, onNavigate, onFeedback }: { loca
       {!signedIn && <DropdownMenuItem onSelect={() => signIn("/")}><LogIn />{l("登录并跨设备同步", "Sign in and sync")}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => onNavigate("billing")}><CreditCard />{l("套餐与账单", "Plans & billing")}</DropdownMenuItem>
       {identity?.admin && <DropdownMenuItem onSelect={() => onNavigate("operations")}><BarChart3 />{l("运营中心", "Operations center")}</DropdownMenuItem>}
+      {signedIn && emailReminders !== null && <DropdownMenuCheckboxItem checked={emailReminders} onCheckedChange={(checked) => onToggleReminders(checked === true)} onSelect={(event) => event.preventDefault()}><Mail className="mr-2 size-4" />{l("复习提醒邮件", "Review reminder emails")}</DropdownMenuCheckboxItem>}
       <DropdownMenuItem onSelect={onFeedback}><CircleHelp />{l("帮助与反馈", "Help & feedback")}</DropdownMenuItem>
       <DropdownMenuItem asChild><Link href="/terms" target="_blank"><FileText />{l("用户协议与隐私", "Terms & privacy")}</Link></DropdownMenuItem>
       {signedIn && <>

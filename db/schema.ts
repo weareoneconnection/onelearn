@@ -21,6 +21,8 @@ export const userPreferences = sqliteTable("user_preferences", {
   locale: text("locale", { enum: ["zh", "en"] }).notNull().default("zh"),
   activeCourseVersionId: text("active_course_version_id"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  emailReminders: integer("email_reminders", { mode: "boolean" }).notNull().default(true),
+  lastRemindedAt: integer("last_reminded_at"),
 });
 
 export const goals = sqliteTable("learning_goals", {
@@ -268,3 +270,15 @@ export const lessonContents = sqliteTable("lesson_contents", {
   responseId: text("response_id"),
   createdAt: integer("created_at").notNull(),
 }, (t) => [uniqueIndex("lesson_contents_course_lesson_unique").on(t.courseVersionId, t.lessonId)]);
+
+// Placement diagnostic per learner × course version (see lib/onelearn/diagnostic.ts).
+export const diagnostics = sqliteTable("diagnostics", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  courseVersionId: text("course_version_id").notNull().references(() => courseVersions.id),
+  questionsJson: text("questions_json").notNull(),
+  answersJson: text("answers_json"),
+  knownModulesJson: text("known_modules_json"),
+  createdAt: integer("created_at").notNull(),
+  completedAt: integer("completed_at"),
+}, (t) => [uniqueIndex("diagnostics_user_course_unique").on(t.userId, t.courseVersionId)]);

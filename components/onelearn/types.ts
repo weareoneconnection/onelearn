@@ -20,6 +20,10 @@ export type MasteryOverview = {
   summary: { pathMastery: number; mastered: number; tracked: number; due: number; averageRetention: number; unassistedPasses: number; delayedReviews: number };
   weekly: Array<{ day: string; count: number }>;
   recent: Array<{ eventType: string; createdAt: number; lessonTitle: string | null; correct: boolean | null }>;
+  streak: { current: number; activeToday: boolean };
+  week: { answers: number; correct: number };
+  /** Modules marked as known by a completed placement diagnostic, per course version. */
+  placements: Record<string, number[]>;
 };
 
 export type SourceItem = { id: string; name: string; sourceKind: "file" | "text" | "web"; mimeType: string; sizeBytes: number; sourceUrl: string | null; status: "processing" | "ready" | "failed"; createdAt: number };
