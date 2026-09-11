@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { LoaderCircle, Mic, MicOff, PhoneOff, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -174,13 +175,15 @@ export function VoiceTutor({ locale, courseVersionId, lessonId, onClose }: { loc
     : phase === "live" ? (muted ? l("已静音", "Muted") : speaking === "tutor" ? l("Sora 正在说话", "Sora is speaking") : speaking === "you" ? l("正在听你说…", "Listening…") : l("直接说话就可以", "Just start talking"))
     : phase === "ended" ? l("通话已结束", "Call ended") : l("语音导师不可用", "Voice tutor unavailable");
 
-  return <div className="absolute inset-0 z-20 flex flex-col bg-[#0a1320]">
+  // Portaled to <body> so transformed/animated ancestors can't turn `fixed` into page-relative.
+  // Phones: full-screen call screen above the tab bar (safe-area aware). Desktop: a docked right-hand call panel.
+  return createPortal(<div role="dialog" aria-modal="true" aria-label={l("语音对话", "Voice call")} className="fixed inset-0 z-50 flex flex-col bg-[#0a1320] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:left-auto md:w-[420px] md:border-l md:border-white/10 md:shadow-2xl">
     <div className="flex items-center justify-between border-b border-white/7 px-5 py-4">
       <div><h2 className="text-sm font-medium text-white">{l("语音对话 · Sora", "Voice · Sora")}</h2><p className="text-xs text-slate-500">{phase === "live" ? l(`本次剩余 ${formatClock(secondsLeft)}`, `${formatClock(secondsLeft)} left in this call`) : status}</p></div>
       <Button variant="ghost" size="icon-sm" aria-label={l("关闭语音对话", "Close voice call")} onClick={() => { end(); onClose(); }} className="size-10 text-slate-400 hover:bg-white/5 hover:text-white md:size-8"><X /></Button>
     </div>
-    <div className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-6">
-      <svg ref={ring} viewBox="0 0 64 64" className={cn("size-32 transition-transform duration-75", phase === "connecting" && "animate-pulse")} aria-hidden="true">
+    <div className="flex min-h-0 flex-1 flex-col items-center gap-4 px-5 pt-10 pb-4 md:pt-8">
+      <svg ref={ring} viewBox="0 0 64 64" className={cn("size-36 flex-none transition-transform duration-75", phase === "connecting" && "animate-pulse")} aria-hidden="true">
         <circle cx="32" cy="32" r="17.5" fill="none" stroke={speaking === "tutor" ? "#67E8F9" : "#2a6f7e"} strokeWidth="3.5" />
         <circle cx="32" cy="32" r="4" fill="#0891B2" />
         <circle cx="44.4" cy="19.6" r="4.5" fill={speaking === "you" ? "#6EE7B7" : "#67E8F9"} />
@@ -188,7 +191,7 @@ export function VoiceTutor({ locale, courseVersionId, lessonId, onClose }: { loc
       <p className="text-sm text-slate-300" role="status">{status}</p>
       {phase === "error" && <p className="max-w-xs text-center text-xs leading-5 text-rose-300">{error}</p>}
       {phase === "ended" && summary && <p className="text-center text-xs text-slate-400">{l(`本次通话 ${formatClock(summary.used)}，本月还剩 ${Math.floor(summary.remaining / 60)} 分钟语音时长`, `Call length ${formatClock(summary.used)} · ${Math.floor(summary.remaining / 60)} voice minutes left this month`)}</p>}
-      {captions.length > 0 && <div className="w-full max-w-md space-y-2 overflow-y-auto" style={{ maxHeight: "40%" }} aria-live="polite">
+      {captions.length > 0 && <div className="min-h-0 w-full max-w-md flex-1 space-y-2 overflow-y-auto overscroll-contain" aria-live="polite">
         {captions.map((caption) => <p key={caption.id} className={cn("rounded-xl px-3 py-2 text-sm leading-6", caption.role === "you" ? "ml-8 bg-cyan-300/10 text-cyan-50" : "mr-8 bg-white/[0.04] text-slate-200")}>{caption.text}</p>)}
       </div>}
     </div>
@@ -203,5 +206,5 @@ export function VoiceTutor({ locale, courseVersionId, lessonId, onClose }: { loc
         <Button onClick={onClose} variant="ghost" className="text-slate-400">{l("返回文字导师", "Back to text tutor")}</Button>
       </>}
     </div>
-  </div>;
+  </div>, document.body);
 }
