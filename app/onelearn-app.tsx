@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, BrainCircuit, Check, ChevronRight, CircleHelp,
   Cloud, CreditCard, Crown, Database, FileCheck2, FileText, FolderOpen, Gauge, GraduationCap, Languages, LayoutDashboard, LibraryBig,
@@ -35,6 +35,18 @@ type WebModelContext = { registerTool: (tool: Record<string, unknown>, options?:
 type GenerationState = { status: "idle" | "loading" | "error"; message?: string };
 type LearnerIdentity = { displayName: string; email: string; mode: "chatgpt" | "clerk" | "device"; admin: boolean };
 type LearnerStats = { courseVersions: number; learningEvents: number; sources: number; averageQuality: number; dueReviews: number };
+type MasteryRecord = {
+  courseVersionId: string; nodeKey: string; nodeTitle: string;
+  score: number; retention: number; status: "unseen" | "learning" | "fragile" | "stable" | "mastered"; mastered: boolean; due: boolean;
+  attempts: number; unassistedPasses: number; reviewPasses: number; lastEvidenceAt: number | null; nextReviewAt: number | null;
+};
+type MasteryOverview = {
+  records: MasteryRecord[];
+  due: MasteryRecord[];
+  summary: { pathMastery: number; mastered: number; tracked: number; due: number; averageRetention: number; unassistedPasses: number; delayedReviews: number };
+  weekly: Array<{ day: string; count: number }>;
+  recent: Array<{ eventType: string; createdAt: number; lessonTitle: string | null; correct: boolean | null }>;
+};
 type SourceItem = { id: string; name: string; sourceKind: "file" | "text" | "web"; mimeType: string; sizeBytes: number; sourceUrl: string | null; status: "processing" | "ready" | "failed"; createdAt: number };
 type OperationsSnapshot = {
   metrics: { users: number; courses: number; sources: number; aiRuns7d: number; failedRuns7d: number; tokens7d: number; activeLearners7d: number; averageQuality: number; paidSubscribers: number; mrrCny: number; revenueCny: number };
@@ -128,30 +140,32 @@ function MetricCard({ label, value, detail, icon: Icon }: { label: string; value
   return <article className="metric-card"><div className="flex items-center justify-between"><span className="text-sm text-slate-400">{label}</span><span className="icon-well"><Icon className="size-4" /></span></div><div className="mt-5 text-[2rem] font-medium leading-none tracking-[-0.05em] text-white">{value}</div><p className="mt-2 text-xs text-slate-500">{detail}</p></article>;
 }
 
-function Dashboard({ onNavigate, locale, identity, stats, storage }: { onNavigate: (view: View) => void; locale: Locale; identity: LearnerIdentity | null; stats: LearnerStats | null; storage: "durable" | "ephemeral" }) {
+function Dashboard({ onNavigate, locale, identity, stats, storage, mastery }: { onNavigate: (view: View) => void; locale: Locale; identity: LearnerIdentity | null; stats: LearnerStats | null; storage: "durable" | "ephemeral"; mastery: MasteryOverview | null }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
-  const activities = [
-    [l("09:10", "09:10"), l("JSON 响应契约", "JSON response contracts"), l("课程", "Lesson"), l("掌握度 +6", "+6 mastery")],
-    [l("09:28", "09:28"), l("Schema 修复挑战", "Schema repair challenge"), l("练习", "Practice"), l("已通过", "Passed")],
-    [l("昨天", "Yesterday"), l("API 身份认证", "API authentication"), l("复习", "Review"), l("已稳定", "Stable")],
-  ];
-  const missionSteps = locale === "zh"
-    ? ["理解 JSON Schema", "修复无效响应", "通过无提示检查"]
-    : ["Understand JSON schemas", "Repair an invalid response", "Pass the no-hint check"];
-  const reviewItems = locale === "zh" ? ["Token 窗口", "API 状态码", "System Prompt"] : ["Token windows", "API status codes", "System prompts"];
+  const pathMastery = mastery?.summary.pathMastery ?? 0;
+  const dueItems = mastery?.due.slice(0, 3) ?? [];
+  const focus = mastery?.records.filter((record) => !record.mastered).sort((a, b) => a.score - b.score)[0] ?? null;
+  const weekly = mastery?.weekly ?? [];
+  const maxWeekly = Math.max(1, ...weekly.map((day) => day.count));
+  const weekTotal = weekly.reduce((sum, day) => sum + day.count, 0);
+  const recent = mastery?.recent ?? [];
+  const eventLabel = (type: string) => type === "review_completed" ? l("复习", "Review") : type === "tutor_turn" ? l("导师", "Tutor") : l("练习", "Practice");
+  const formatTime = (seconds: number) => new Date(seconds * 1000).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const missionSteps: Array<[string, View]> = [[l("学习讲解并回答导师", "Study and answer the tutor"), "learn"], [l("独立完成练习", "Pass practice unassisted"), "practice"], [l("隔天复习验证", "Verify with a delayed review"), "review"]];
+  const missionStep = !focus ? 0 : focus.unassistedPasses === 0 ? 1 : 2;
   return <div className="space-y-7 animate-in fade-in duration-500">
     <section className="dashboard-hero">
       <div className="relative z-10 max-w-2xl"><div className="eyebrow"><Sparkles className="size-3.5" />{storage === "durable" ? l("跨设备学习档案已同步", "CROSS-DEVICE PROFILE SYNCED") : l("设备模式 · 登录后跨设备同步", "DEVICE MODE · SIGN IN TO SYNC")}</div><h1>{l(`你好，${identity?.displayName ?? "学习者"}。`, `Hello, ${identity?.displayName ?? "learner"}.`)}</h1><p>{l("课程、资料、练习和 AI 导师证据现在进入同一份学习档案。", "Courses, sources, practice, and AI tutor evidence now flow into one learning profile.")}</p><div className="mt-7 flex flex-wrap gap-3"><Button onClick={() => onNavigate("learn")} className="primary-pill">{l("继续学习", "Continue learning")} <ArrowRight /></Button><Button onClick={() => onNavigate("path")} variant="outline" className="secondary-pill">{l("查看知识地图", "View knowledge map")}</Button></div></div>
-      <div className="mastery-orbit" aria-label={l("当前路径掌握度 68%", "Current path mastery 68 percent")}><div className="orbit-ring orbit-ring-one" /><div className="orbit-ring orbit-ring-two" /><div className="orbit-core"><strong>68%</strong><span>{l("路径掌握度", "PATH MASTERY")}</span></div><i className="orbit-node node-a" /><i className="orbit-node node-b" /><i className="orbit-node node-c" /></div>
+      <div className="mastery-orbit" aria-label={l(`当前路径掌握度 ${pathMastery}%`, `Current path mastery ${pathMastery} percent`)}><div className="orbit-ring orbit-ring-one" /><div className="orbit-ring orbit-ring-two" /><div className="orbit-core"><strong>{pathMastery}%</strong><span>{l("路径掌握度", "PATH MASTERY")}</span></div><i className="orbit-node node-a" /><i className="orbit-node node-b" /><i className="orbit-node node-c" /></div>
     </section>
     <section className="grid grid-cols-2 gap-3 xl:grid-cols-4"><MetricCard label={l("课程版本", "Course versions")} value={String(stats?.courseVersions ?? 0)} detail={l("跨设备保存", "saved across devices")} icon={BrainCircuit} /><MetricCard label={l("学习事件", "Learning events")} value={String(stats?.learningEvents ?? 0)} detail={l("课程、练习与导师", "courses, practice, and tutor")} icon={Activity} /><MetricCard label={l("平均质量", "Average quality")} value={`${Math.round(stats?.averageQuality ?? 0)}%`} detail={l("AI 独立评测", "independent AI review")} icon={FileCheck2} /><MetricCard label={l("可信资料", "Trusted sources")} value={String(stats?.sources ?? 0)} detail={l("已进入检索知识库", "indexed for retrieval")} icon={Database} /></section>
     <section className="grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
-      <article className="surface-card p-5 sm:p-6"><div className="flex items-start justify-between gap-4"><div><div className="section-kicker">{l("今日任务", "TODAY'S MISSION")}</div><h2 className="mt-2 text-xl font-medium tracking-tight text-white">{l("让模型输出更可靠", "Make model outputs reliable")}</h2><p className="mt-1 text-sm text-slate-400">{l("API 与结构化数据 · 第 4/6 课", "APIs & structured data · Lesson 4 of 6")}</p></div><span className="time-chip">{l("18 分钟", "18 min")}</span></div><div className="mt-7 grid gap-3 sm:grid-cols-3">{missionSteps.map((item, i) => <div key={item} className={cn("mission-step", i === 0 && "is-current")}><div className="flex items-center gap-2"><span>{i + 1}</span><p>{item}</p></div></div>)}</div><div className="mt-6 flex items-center gap-3"><Progress value={42} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><span className="text-xs text-slate-500">42%</span></div></article>
-      <article className="surface-card flex min-h-[260px] flex-col p-5 sm:p-6"><div className="flex items-center justify-between"><div><div className="section-kicker">{l("复习队列", "REVIEW QUEUE")}</div><h2 className="mt-2 text-lg font-medium text-white">{l("3 个节点待复习", "3 nodes due")}</h2></div><TimerReset className="size-5 text-amber-300" /></div><div className="mt-5 space-y-2">{reviewItems.map((item, i) => <button key={item} onClick={() => onNavigate("review")} className="review-row"><span className={cn("review-priority", i === 0 ? "high" : "normal")} /><span className="flex-1 text-left text-sm text-slate-200">{item}</span><span className="text-xs text-slate-500">{i === 0 ? l("薄弱", "fragile") : l("到期", "due")}</span><ChevronRight className="size-4 text-slate-600" /></button>)}</div><Button onClick={() => onNavigate("review")} variant="ghost" className="link-button mt-auto">{l("开始 8 分钟复习", "Start 8-minute review")} <ArrowRight /></Button></article>
+      <article className="surface-card p-5 sm:p-6"><div className="flex items-start justify-between gap-4"><div><div className="section-kicker">{l("今日任务", "TODAY'S MISSION")}</div><h2 className="mt-2 text-xl font-medium tracking-tight text-white">{focus ? focus.nodeTitle : l("开始第一节课", "Start your first lesson")}</h2><p className="mt-1 text-sm text-slate-400">{focus ? l(`当前掌握度 ${focus.score}% · 已独立答对 ${focus.unassistedPasses} 次`, `Mastery ${focus.score}% · ${focus.unassistedPasses} unassisted passes`) : l("生成课程并开始练习后，这里会显示你最需要加强的节点。", "Generate a course and practice; your weakest node will appear here.")}</p></div></div><div className="mt-7 grid gap-3 sm:grid-cols-3">{missionSteps.map(([item, target], i) => <button key={item} onClick={() => onNavigate(target)} className={cn("mission-step text-left", i === missionStep && "is-current")}><div className="flex items-center gap-2"><span>{i + 1}</span><p>{item}</p></div></button>)}</div><div className="mt-6 flex items-center gap-3"><Progress value={focus?.score ?? 0} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><span className="text-xs text-slate-500">{focus?.score ?? 0}%</span></div></article>
+      <article className="surface-card flex min-h-[260px] flex-col p-5 sm:p-6"><div className="flex items-center justify-between"><div><div className="section-kicker">{l("复习队列", "REVIEW QUEUE")}</div><h2 className="mt-2 text-lg font-medium text-white">{l(`${mastery?.summary.due ?? 0} 个节点待复习`, `${mastery?.summary.due ?? 0} nodes due`)}</h2></div><TimerReset className="size-5 text-amber-300" /></div><div className="mt-5 space-y-2">{dueItems.length ? dueItems.map((item) => <button key={`${item.courseVersionId}:${item.nodeKey}`} onClick={() => onNavigate("review")} className="review-row"><span className={cn("review-priority", item.retention < 60 ? "high" : "normal")} /><span className="flex-1 text-left text-sm text-slate-200">{item.nodeTitle}</span><span className="text-xs text-slate-500">{l(`保持率 ${item.retention}%`, `${item.retention}% retained`)}</span><ChevronRight className="size-4 text-slate-600" /></button>) : <p className="text-sm text-slate-500">{l("暂时没有到期的复习。", "Nothing is due for review yet.")}</p>}</div><Button onClick={() => onNavigate("review")} variant="ghost" className="link-button mt-auto">{l("打开复习队列", "Open review queue")} <ArrowRight /></Button></article>
     </section>
     <section className="grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
-      <article className="surface-card p-5 sm:p-6"><div className="flex items-center justify-between"><div><div className="section-kicker">{l("掌握速度", "MASTERY VELOCITY")}</div><h2 className="mt-2 text-lg font-medium text-white">{l("本周", "This week")}</h2></div><span className="text-sm text-emerald-300">+18%</span></div><div className="velocity-chart" aria-label={l("每周掌握度增长图", "Weekly mastery gain chart")}>{[36, 55, 42, 72, 60, 86, 68].map((height, i) => <div key={i} className="chart-column"><i style={{ height: String(height) + "%" }} /><span>{(locale === "zh" ? ["一", "二", "三", "四", "五", "六", "日"] : ["M", "T", "W", "T", "F", "S", "S"])[i]}</span></div>)}</div></article>
-      <article className="surface-card p-5 sm:p-6"><div className="flex items-center justify-between"><div><div className="section-kicker">{l("学习轨迹", "LEARNING TRACE")}</div><h2 className="mt-2 text-lg font-medium text-white">{l("最近的能力证据", "Recent evidence")}</h2></div><MoreHorizontal className="size-4 text-slate-600" /></div><div className="mt-5 divide-y divide-white/6">{activities.map((a) => <div key={a[1]} className="grid grid-cols-[62px_1fr_auto] items-center gap-3 py-3.5"><span className="text-xs text-slate-600">{a[0]}</span><div><p className="text-sm text-slate-200">{a[1]}</p><p className="text-xs text-slate-500">{a[2]}</p></div><span className="text-xs text-cyan-300">{a[3]}</span></div>)}</div></article>
+      <article className="surface-card p-5 sm:p-6"><div className="flex items-center justify-between"><div><div className="section-kicker">{l("学习证据", "LEARNING EVIDENCE")}</div><h2 className="mt-2 text-lg font-medium text-white">{l("最近 7 天", "Last 7 days")}</h2></div><span className="text-sm text-emerald-300">{weekTotal}</span></div><div className="velocity-chart" aria-label={l("最近 7 天学习证据数量", "Learning evidence over the last 7 days")}>{weekly.map((day) => <div key={day.day} className="chart-column"><i style={{ height: `${Math.max(4, Math.round((day.count / maxWeekly) * 100))}%` }} /><span>{new Date(`${day.day}T00:00:00Z`).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { weekday: "narrow", timeZone: "UTC" })}</span></div>)}</div></article>
+      <article className="surface-card p-5 sm:p-6"><div className="flex items-center justify-between"><div><div className="section-kicker">{l("学习轨迹", "LEARNING TRACE")}</div><h2 className="mt-2 text-lg font-medium text-white">{l("最近的能力证据", "Recent evidence")}</h2></div><MoreHorizontal className="size-4 text-slate-600" /></div><div className="mt-5 divide-y divide-white/6">{recent.length ? recent.slice(0, 5).map((item, i) => <div key={`${item.createdAt}-${i}`} className="grid grid-cols-[92px_1fr_auto] items-center gap-3 py-3.5"><span className="text-xs text-slate-600">{formatTime(item.createdAt)}</span><div><p className="text-sm text-slate-200">{item.lessonTitle ?? l("学习节点", "Learning node")}</p><p className="text-xs text-slate-500">{eventLabel(item.eventType)}</p></div><span className="text-xs text-cyan-300">{item.correct === null ? l("已记录", "Recorded") : item.correct ? l("答对", "Correct") : l("答错", "Missed")}</span></div>) : <p className="py-4 text-sm text-slate-500">{l("完成练习或与导师对话后，证据会出现在这里。", "Evidence appears here after practice or tutor sessions.")}</p>}</div></article>
     </section>
   </div>;
 }
@@ -253,7 +267,7 @@ function CourseUniverse({ selectedCourse, onSelectCourse, onStartCourse, locale,
   </div>;
 }
 
-function KnowledgeMap({ onNavigate, activeCourse, bundle, locale, onRegenerate }: { onNavigate: (view: View) => void; activeCourse: CatalogEntry | null; bundle: GeneratedCourseBundle | null; locale: Locale; onRegenerate: () => void }) {
+function KnowledgeMap({ onNavigate, activeCourse, bundle, locale, onRegenerate, mastery }: { onNavigate: (view: View) => void; activeCourse: CatalogEntry | null; bundle: GeneratedCourseBundle | null; locale: Locale; onRegenerate: () => void; mastery: MasteryOverview | null }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
   const fallbackNodes = [
     { id: 1, title: l("AI 基础", "AI foundations"), meta: l("已掌握", "Mastered"), score: 94, state: "mastered" },
@@ -263,13 +277,28 @@ function KnowledgeMap({ onNavigate, activeCourse, bundle, locale, onRegenerate }
     { id: 5, title: l("记忆与上下文", "Memory & context"), meta: l("未解锁", "Locked"), score: 0, state: "locked" },
     { id: 6, title: l("生产级 Agent", "Production agent"), meta: l("未解锁", "Locked"), score: 0, state: "locked" },
   ];
-  const pathNodes = bundle ? bundle.curriculum.modules.map((module, index) => ({
-    id: index + 1,
-    title: module.title,
-    meta: index === 0 ? l("可以开始", "Ready to begin") : l(`${module.lessons.length} 节课`, `${module.lessons.length} lessons`),
-    score: 0,
-    state: index === 0 ? "active" : "locked",
-  })) : fallbackNodes;
+  // Module score = average of its lessons' mastery; a module unlocks once any lesson of the previous one is stable (≥ 65).
+  const recordFor = (lessonId: string) => mastery?.records.find((record) => record.courseVersionId === bundle?.generation.courseVersionId && record.nodeKey === lessonId);
+  const moduleStats = bundle ? bundle.curriculum.modules.map((module) => {
+    const records = module.lessons.map((lesson) => recordFor(lesson.id));
+    return {
+      score: Math.round(records.reduce((sum, record) => sum + (record?.score ?? 0), 0) / Math.max(1, records.length)),
+      best: Math.max(0, ...records.map((record) => record?.score ?? 0)),
+      mastered: records.filter((record) => record?.mastered).length,
+    };
+  }) : [];
+  const pathNodes = bundle ? bundle.curriculum.modules.map((module, index) => {
+    const stats = moduleStats[index];
+    const unlocked = index === 0 || moduleStats[index - 1].best >= 65;
+    const state = stats.mastered === module.lessons.length ? "mastered" : !unlocked ? "locked" : stats.best > 0 ? "active" : "ready";
+    return {
+      id: index + 1,
+      title: module.title,
+      meta: state === "locked" ? l("完成上一模块后解锁", "Unlocks after the previous module") : l(`${module.lessons.length} 节课 · 已掌握 ${stats.mastered}`, `${module.lessons.length} lessons · ${stats.mastered} mastered`),
+      score: stats.score,
+      state,
+    };
+  }) : fallbackNodes;
   const activeTitle = activeCourse ? (locale === "en" ? courseTitleEn(activeCourse.title) : activeCourse.title) : null;
   if (activeCourse && !bundle) return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker="OPENAI CURRICULUM ENGINE" title={activeTitle ?? activeCourse.title} detail={l("这门课程还没有生成当前语言版本。", "This course has not been generated in the current language yet.")}><Button onClick={onRegenerate} className="primary-pill"><Sparkles /> {l("用 OpenAI 生成", "Generate with OpenAI")}</Button></PageHeading><article className="ai-empty-state"><Orbit /><h2>{l("目录是入口，课程由大模型按需创建", "The catalog is the entry; the model creates the course on demand")}</h2><p>{l("OpenAI 会生成模块、课节、首课正文、检查问题与练习，并在当前设备缓存结果。", "OpenAI will generate modules, lessons, the first lesson content, checkpoints, and practice, then cache the result on this device.")}</p></article></div>;
   const lessonCount = bundle?.curriculum.modules.reduce((total, module) => total + module.lessons.length, 0) ?? 36;
@@ -330,6 +359,7 @@ function LearningRoom({ locale, bundle }: { locale: Locale; bundle: GeneratedCou
           mastery: step === 1 ? 0 : 25,
           locale,
           courseVersionId: bundle?.generation.courseVersionId ?? null,
+          lessonId: bundle ? lesson.id : undefined,
           history,
         }),
       });
@@ -346,34 +376,58 @@ function LearningRoom({ locale, bundle }: { locale: Locale; bundle: GeneratedCou
   return <div className="learning-layout animate-in fade-in duration-500"><section className="lesson-surface"><div className="flex items-center justify-between border-b border-white/7 px-5 py-4 sm:px-7"><div><div className="section-kicker">{lesson.id.toUpperCase()} · {lesson.durationMinutes} {l("分钟", "MIN")}</div><h1 className="mt-1 text-lg font-medium text-white">{lesson.title}</h1></div><div className="flex items-center gap-2"><span className="hidden text-xs text-slate-500 sm:inline">{bundle ? l("OpenAI 生成课程", "OpenAI-generated course") : l("演示课程", "Demo course")}</span><span className="status-dot" /></div></div><div className="lesson-body generated-lesson-body"><div className="section-kicker">{l("学习目标", "LEARNING OBJECTIVE")}</div><h2>{lesson.objective}</h2>{lesson.sections.map((section) => <section key={section.heading} className="lesson-section"><h3>{section.heading}</h3><p>{section.body}</p></section>)}<div className="lesson-key-points"><span>{l("关键要点", "KEY POINTS")}</span>{lesson.keyPoints.map((point) => <p key={point}><Check />{point}</p>)}</div><div className="worked-example"><span>{l("示例", "WORKED EXAMPLE")}</span><h3>{lesson.workedExample.scenario}</h3><ol>{lesson.workedExample.steps.map((item, index) => <li key={item}><i>{index + 1}</i>{item}</li>)}</ol><p>{lesson.workedExample.takeaway}</p></div></div><div className="border-t border-white/7 p-4 sm:px-7"><div className="flex items-center gap-3"><Progress value={Math.min(90, 35 + step * 18)} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><span className="text-xs text-slate-500">{Math.min(90, 35 + step * 18)}%</span></div></div></section><aside className="tutor-panel"><div className="flex items-center gap-3 border-b border-white/7 p-5"><div className="tutor-avatar"><Orbit /></div><div><h2 className="text-sm font-medium text-white">Sora · {l("OpenAI 导师", "OpenAI Tutor")}</h2><p className="text-xs text-emerald-300">{isThinking ? l("正在思考…", "Thinking…") : l("基于当前课程追问", "Grounded in this lesson")}</p></div></div><div className="tutor-thread scrollbar-thin">{messages.map((message, i) => <div key={i} className={cn("message", message.from === "you" && "message-you")}><span>{message.from === "tutor" ? "SORA" : l("你", "YOU")}</span><p>{message.text}</p></div>)}{isThinking && <div className="message"><span>SORA</span><p className="flex items-center gap-2"><LoaderCircle className="size-4 animate-spin" />{l("正在分析你的回答", "Analyzing your answer")}</p></div>}{step > 1 && <div className="mastery-signal"><Check className="size-4" /><span>{l("理解证据已记录", "Understanding evidence captured")}</span></div>}</div><div className="tutor-input-wrap"><label htmlFor="tutor-answer" className="sr-only">{l("回答导师", "Answer your tutor")}</label><textarea id="tutor-answer" disabled={isThinking} value={answer} onChange={(event) => setAnswer(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }} placeholder={l("用你自己的话解释…", "Explain in your own words…")} /><div className="flex items-center justify-between"><Button variant="ghost" size="icon-sm" aria-label={l("语音输入", "Voice input")} className="text-slate-500"><Mic /></Button><Button disabled={isThinking || !answer.trim()} onClick={() => void submit()} size="sm" className="primary-pill h-8">{isThinking ? <LoaderCircle className="animate-spin" /> : l("发送", "Send")} {!isThinking && <ArrowRight />}</Button></div></div></aside></div>;
 }
 
-function PracticeView({ locale, bundle }: { locale: Locale; bundle: GeneratedCourseBundle | null }) {
+/** One multiple-choice question from the active lesson. Answers on a saved course are graded by the server. */
+function QuestionCard({ locale, bundle, mode, onAnswered }: { locale: Locale; bundle: GeneratedCourseBundle | null; mode: "practice" | "review"; onAnswered: () => void }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
+  const lesson = bundle?.curriculum.firstLesson ?? fallbackLesson(locale);
+  const available = lesson.practice.filter((item) => item.options.length >= 2);
+  const questions = available.length ? available : fallbackLesson(locale).practice;
+  const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
-  const [checked, setChecked] = useState(false);
-  const fallback = fallbackLesson(locale).practice[0];
-  const generated = bundle?.curriculum.firstLesson.practice.find((item) => item.options.length >= 2);
-  const question = generated ?? fallback;
-  const correctOption = question.correctOption >= 0 && question.correctOption < question.options.length ? question.correctOption : 0;
-  const checkAnswer = () => {
+  const [result, setResult] = useState<{ correct: boolean; correctOption: number; explanation: string; score?: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const question = questions[index % questions.length];
+  const localCorrect = question.correctOption >= 0 && question.correctOption < question.options.length ? question.correctOption : 0;
+  const correctOption = result?.correctOption ?? localCorrect;
+  const checkAnswer = async () => {
     if (selected === null) return;
-    setChecked(true);
-    if (bundle?.generation.courseVersionId) void oneLearnFetch("/api/progress", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ locale, courseVersionId: bundle.generation.courseVersionId, eventType: "practice_answered", payload: { questionId: question.id, selected, correct: selected === correctOption } }),
-    });
+    const courseVersionId = bundle?.generation.courseVersionId;
+    if (!bundle || !courseVersionId) { setResult({ correct: selected === localCorrect, correctOption: localCorrect, explanation: question.explanation }); return; }
+    setBusy(true); setError("");
+    try {
+      const response = await oneLearnFetch("/api/mastery/answer", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale, courseVersionId, lessonId: lesson.id, questionId: question.id, selected, mode }),
+      });
+      const payload = await response.json() as { correct?: boolean; correctOption?: number; explanation?: string; record?: { score: number }; error?: string };
+      if (!response.ok || typeof payload.correct !== "boolean") throw new Error(payload.error || l("答案未能记录", "The answer could not be recorded"));
+      setResult({ correct: payload.correct, correctOption: payload.correctOption ?? localCorrect, explanation: payload.explanation ?? question.explanation, score: payload.record?.score });
+      onAnswered();
+    } catch (answerError) {
+      setError(answerError instanceof Error ? answerError.message : l("答案未能记录", "The answer could not be recorded"));
+    } finally { setBusy(false); }
   };
-  return <div className="mx-auto max-w-4xl animate-in fade-in duration-500"><PageHeading kicker={bundle ? "OPENAI · ADAPTIVE PRACTICE" : l("自适应练习", "ADAPTIVE PRACTICE")} title={bundle?.curriculum.firstLesson.title ?? l("Schema 推理", "Schema reasoning")} detail={bundle ? l("题目与解析来自当前生成课程；结果写入学习档案。", "Questions come from this course and results are saved to your learning profile.") : l("演示挑战 · 难度会随每次回答自动调整", "Demo challenge · difficulty adapts after every answer")}><span className="time-chip">05:42</span></PageHeading><article className="surface-card mt-8 overflow-hidden"><div className="border-b border-white/7 p-6 sm:p-9"><span className="question-type">{l("单项最佳答案", "SINGLE BEST ANSWER")}</span><h2 className="mt-5 max-w-2xl text-xl font-medium leading-8 text-white">{question.question}</h2></div><div className="space-y-3 p-6 sm:p-9">{question.options.map((option, i) => <button key={option} onClick={() => !checked && setSelected(i)} className={cn("answer-option", selected === i && "is-selected", checked && i === correctOption && "is-correct", checked && selected === i && i !== correctOption && "is-wrong")}><span>{String.fromCharCode(65 + i)}</span><p>{option}</p>{checked && i === correctOption && <Check />}</button>)}{checked && <div className="feedback-box"><ShieldCheck /><div><strong>{selected === correctOption ? l("回答正确", "Correct") : l("还不完全正确", "Not quite")}</strong><p>{question.explanation}</p></div></div>}<div className="flex justify-end pt-3"><Button disabled={selected === null || checked} onClick={checkAnswer} className="primary-pill">{checked ? l("已记录", "Recorded") : l("检查答案", "Check answer")}</Button></div></div></article></div>;
+  const next = () => { setIndex((current) => current + 1); setSelected(null); setResult(null); setError(""); };
+  return <article className="surface-card mt-8 overflow-hidden"><div className="border-b border-white/7 p-6 sm:p-9"><span className="question-type">{mode === "review" ? l("间隔复习", "SPACED REVIEW") : l("单项最佳答案", "SINGLE BEST ANSWER")} · {(index % questions.length) + 1}/{questions.length}</span><h2 className="mt-5 max-w-2xl text-xl font-medium leading-8 text-white">{question.question}</h2></div><div className="space-y-3 p-6 sm:p-9">{question.options.map((option, i) => <button key={option} onClick={() => !result && setSelected(i)} className={cn("answer-option", selected === i && "is-selected", result && i === correctOption && "is-correct", result && selected === i && i !== correctOption && "is-wrong")}><span>{String.fromCharCode(65 + i)}</span><p>{option}</p>{result && i === correctOption && <Check />}</button>)}{result && <div className="feedback-box"><ShieldCheck /><div><strong>{result.correct ? l("回答正确", "Correct") : l("还不完全正确", "Not quite")}{typeof result.score === "number" && ` · ${l("掌握度", "Mastery")} ${result.score}%`}</strong><p>{result.explanation}</p></div></div>}{error && <p className="source-error"><TriangleAlert />{error}</p>}<div className="flex justify-end pt-3">{result ? <Button onClick={next} className="primary-pill">{l("下一题", "Next question")} <ArrowRight /></Button> : <Button disabled={selected === null || busy} onClick={() => void checkAnswer()} className="primary-pill">{busy && <LoaderCircle className="animate-spin" />}{l("检查答案", "Check answer")}</Button>}</div></div></article>;
 }
 
-function ReviewView({ locale }: { locale: Locale }) {
+function PracticeView({ locale, bundle, onAnswered }: { locale: Locale; bundle: GeneratedCourseBundle | null; onAnswered: () => void }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
-  const items = [
-    { title: l("Token 窗口", "Token windows"), due: l("优先复习", "Priority review"), score: 61, amber: true },
-    { title: l("API 状态码", "API status codes"), due: l("今天到期", "Due today"), score: 74 },
-    { title: "System Prompts", due: l("今天到期", "Due today"), score: 79 },
-  ];
-  return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker={l("间隔记忆", "SPACED RETENTION")} title={l("你的复习队列", "Your review queue")} detail={l("今天投入 8 分钟，让三个薄弱概念保持稳定。", "8 minutes today keeps three fragile concepts stable.")}><Button className="primary-pill"><Play /> {l("开始复习", "Start review")}</Button></PageHeading><div className="grid gap-4 lg:grid-cols-3">{items.map((item) => <article key={item.title} className="surface-card p-6"><div className="flex items-center justify-between"><span className={cn("status-chip", item.amber && "is-amber")}>{item.due}</span><TimerReset className="size-5 text-slate-500" /></div><h2 className="mt-8 text-lg font-medium text-white">{item.title}</h2><p className="mt-1 text-sm text-slate-500">{l("预测保持率", "Predicted retention")}</p><div className="mt-5 flex items-center gap-3"><Progress value={item.score} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><span className="text-sm text-slate-300">{item.score}%</span></div><Button variant="ghost" className="link-button mt-6">{l("现在复习", "Review now")} <ArrowRight /></Button></article>)}</div></div>;
+  return <div className="mx-auto max-w-4xl animate-in fade-in duration-500"><PageHeading kicker={bundle ? "OPENAI · ADAPTIVE PRACTICE" : l("自适应练习", "ADAPTIVE PRACTICE")} title={bundle?.curriculum.firstLesson.title ?? l("Schema 推理", "Schema reasoning")} detail={bundle ? l("答案由服务器评分，并更新掌握度与复习计划。", "Answers are graded on the server and update your mastery and review schedule.") : l("演示题目 · 生成课程后开始记录掌握度", "Demo question · generate a course to start tracking mastery")}><span className="time-chip">{bundle ? l("计入掌握度", "Counts toward mastery") : l("演示", "Demo")}</span></PageHeading><QuestionCard locale={locale} bundle={bundle} mode="practice" onAnswered={onAnswered} /></div>;
+}
+
+function ReviewView({ locale, bundle, mastery, onAnswered, onNavigate }: { locale: Locale; bundle: GeneratedCourseBundle | null; mastery: MasteryOverview | null; onAnswered: () => void; onNavigate: (view: View) => void }) {
+  const l = (zh: string, en: string) => pick(locale, zh, en);
+  const [active, setActive] = useState<string | null>(null);
+  const keyOf = (record: MasteryRecord) => `${record.courseVersionId}:${record.nodeKey}`;
+  const canQuiz = (record: MasteryRecord) => bundle?.generation.courseVersionId === record.courseVersionId && bundle.curriculum.firstLesson.id === record.nodeKey;
+  const due = mastery?.due ?? [];
+  const upcoming = (mastery?.records ?? []).filter((record) => !record.due && record.nextReviewAt).sort((a, b) => (a.nextReviewAt ?? 0) - (b.nextReviewAt ?? 0)).slice(0, 6);
+  const firstQuizzable = due.find(canQuiz);
+  const formatDate = (seconds: number | null) => seconds ? new Date(seconds * 1000).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+  const card = (record: MasteryRecord, isDue: boolean) => <article key={keyOf(record)} className="surface-card p-6"><div className="flex items-center justify-between"><span className={cn("status-chip", isDue && record.retention < 60 && "is-amber")}>{isDue ? (record.retention < 60 ? l("优先复习", "Priority review") : l("已到期", "Due now")) : l(`${formatDate(record.nextReviewAt)} 到期`, `Due ${formatDate(record.nextReviewAt)}`)}</span><TimerReset className="size-5 text-slate-500" /></div><h2 className="mt-8 text-lg font-medium text-white">{record.nodeTitle}</h2><p className="mt-1 text-sm text-slate-500">{l("预测保持率", "Predicted retention")}</p><div className="mt-5 flex items-center gap-3"><Progress value={record.retention} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><span className="text-sm text-slate-300">{record.retention}%</span></div>{isDue && <Button variant="ghost" className="link-button mt-6" onClick={() => canQuiz(record) ? setActive(keyOf(record)) : onNavigate("learn")}>{canQuiz(record) ? l("现在复习", "Review now") : l("在学习空间复习", "Review in the learning room")} <ArrowRight /></Button>}</article>;
+  return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker={l("间隔记忆", "SPACED RETENTION")} title={l("你的复习队列", "Your review queue")} detail={due.length ? l(`${due.length} 个节点已到期。隔天仍能独立答对，才算真正掌握。`, `${due.length} nodes are due. Answering correctly after a delay is what proves mastery.`) : l("暂时没有到期的节点。练习后，系统会按遗忘曲线安排复习。", "Nothing is due. After practice, reviews are scheduled along your forgetting curve.")}>{firstQuizzable && <Button className="primary-pill" onClick={() => setActive(keyOf(firstQuizzable))}><Play /> {l("开始复习", "Start review")}</Button>}</PageHeading>{active && <div><QuestionCard key={active} locale={locale} bundle={bundle} mode="review" onAnswered={onAnswered} /><div className="mt-3 flex justify-end"><Button variant="ghost" className="link-button" onClick={() => setActive(null)}>{l("结束本次复习", "Finish this review")}</Button></div></div>}{due.length ? <div className="grid gap-4 lg:grid-cols-3">{due.map((record) => card(record, true))}</div> : <article className="ai-empty-state"><TimerReset /><h2>{l("复习队列是空的", "Your review queue is empty")}</h2><p>{l("完成练习后，节点会在合适的时间回到这里。", "After practice, nodes return here at the right time.")}</p></article>}{upcoming.length > 0 && <section><div className="section-kicker mb-3">{l("即将到期", "UPCOMING")}</div><div className="grid gap-4 lg:grid-cols-3">{upcoming.map((record) => card(record, false))}</div></section>}</div>;
 }
 
 function LibraryView({ locale }: { locale: Locale }) {
@@ -576,16 +630,18 @@ function OperationsView({ locale }: { locale: Locale }) {
   return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker={l("运营与治理", "OPERATIONS & GOVERNANCE")} title={l("OneLearn 运营中心", "OneLearn operations center")} detail={l("监控用户、课程质量、资料索引、模型用量与失败率。", "Monitor learners, course quality, source indexing, model usage, and failures.")}><Button disabled={loading} onClick={() => void load()} variant="outline" className="secondary-pill"><RefreshCw className={cn(loading && "animate-spin")} />{l("刷新", "Refresh")}</Button></PageHeading>{error ? <article className="ops-gate"><LockKeyhole /><h2>{l("运营后台受到保护", "Operations is protected")}</h2><p>{error}</p><small>{l("在部署环境中设置 ONELEARN_ADMIN_EMAILS 后重新打开。", "Set ONELEARN_ADMIN_EMAILS in the deployment environment, then reopen this view.")}</small></article> : loading ? <article className="ai-empty-state"><LoaderCircle className="animate-spin" /><h2>{l("正在读取运营数据", "Loading operations data")}</h2></article> : data && <><section className="ops-metrics">{metrics.map(([label, value, detail]) => <article key={String(label)}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>)}</section><section className="surface-card overflow-hidden"><div className="ops-table-header"><div><div className="section-kicker">QUALITY REVIEW QUEUE</div><h2>{l("课程质量复核队列", "Course quality review queue")}</h2></div><span>{data.qualityQueue.length}</span></div>{data.qualityQueue.length ? <div className="overflow-x-auto"><table className="ops-table"><thead><tr><th>{l("课程", "Course")}</th><th>{l("版本", "Version")}</th><th>{l("语言", "Locale")}</th><th>{l("评分", "Score")}</th><th>{l("状态", "Status")}</th><th>{l("用户", "Learner")}</th></tr></thead><tbody>{data.qualityQueue.map((item) => <tr key={item.id}><td>{item.title}</td><td>V{item.version}</td><td>{item.locale.toUpperCase()}</td><td>{Math.round(item.qualityScore ?? 0)}</td><td><span className={cn("source-status", item.qualityStatus === "blocked" && "is-failed")}>{item.qualityStatus}</span></td><td>{item.email}</td></tr>)}</tbody></table></div> : <div className="ops-empty">{l("当前没有待复核课程。", "No courses currently need review.")}</div>}</section></>}</div>;
 }
 
-function ProofView({ locale }: { locale: Locale }) {
+function ProofView({ locale, mastery }: { locale: Locale; mastery: MasteryOverview | null }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
-  const proofs = [
-    { title: l("结构化输出验证器", "Structured output validator"), type: l("实践项目", "Working project"), detail: l("通过 18/18 项契约测试", "Passed 18/18 contract tests") },
-    { title: l("口头答辩：API 可靠性", "Oral defense: API reliability"), type: l("自适应评估", "Adaptive assessment"), detail: l("评估器高度一致", "High evaluator agreement") },
+  const mastered = (mastery?.records ?? []).filter((record) => record.mastered).sort((a, b) => (b.lastEvidenceAt ?? 0) - (a.lastEvidenceAt ?? 0));
+  const summary = mastery?.summary;
+  const lastVerified = mastered[0]?.lastEvidenceAt;
+  const stats: Array<[string, string]> = [
+    [l("已掌握节点", "Mastered nodes"), `${mastered.length} / ${summary?.tracked ?? 0}`],
+    [l("独立答对", "Unassisted passes"), String(summary?.unassistedPasses ?? 0)],
+    [l("延迟复测通过", "Delayed reviews passed"), String(summary?.delayedReviews ?? 0)],
+    [l("最近验证", "Last verified"), lastVerified ? new Date(lastVerified * 1000).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US") : "—"],
   ];
-  const stats = locale === "zh"
-    ? [["证据", "8 项成果"], ["评估", "91 / 100"], ["保持率", "稳定"], ["最近验证", "2026年9月11日"]]
-    : [["Evidence", "8 artifacts"], ["Assessment", "91 / 100"], ["Retention", "Stable"], ["Last verified", "Sep 11, 2026"]];
-  return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker={l("掌握护照", "MASTERY PASSPORT")} title={l("以证据证明能力", "Capability, backed by evidence")} detail={l("不是结课徽章，而是你真正能做什么的动态记录。", "Not a completion badge. A living record of what you can do.")}><Button variant="outline" className="secondary-pill">{l("分享档案", "Share profile")}</Button></PageHeading><article className="passport-card"><div className="passport-glow" /><div className="relative z-10"><div className="flex items-start justify-between"><div><div className="flex items-center gap-2 text-sm text-cyan-300"><ShieldCheck className="size-4" /> {l("已验证能力", "VERIFIED CAPABILITY")}</div><h2 className="mt-5 text-3xl font-medium tracking-[-0.04em] text-white">{l("AI Agent 基础", "AI Agent Foundations")}</h2><p className="mt-2 text-slate-400">{l("等级 3 · 可独立应用", "Level 3 · Applied independently")}</p></div><div className="passport-seal"><Orbit /></div></div><div className="mt-12 grid gap-6 border-t border-white/10 pt-6 sm:grid-cols-4">{stats.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></div></article><div className="grid gap-4 md:grid-cols-2">{proofs.map((proof) => <article key={proof.title} className="surface-card flex items-center gap-4 p-5"><span className="source-icon"><Trophy /></span><div className="flex-1"><h2 className="text-sm font-medium text-white">{proof.title}</h2><p className="mt-1 text-xs text-slate-500">{proof.type} · {proof.detail}</p></div><ChevronRight className="size-4 text-slate-600" /></article>)}</div></div>;
+  return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker={l("掌握护照", "MASTERY PASSPORT")} title={l("以证据证明能力", "Capability, backed by evidence")} detail={l("只有同时具备应用证据、独立答对和隔天复测通过的节点，才会出现在这里。", "A node appears here only with application evidence, an unassisted pass, and a delayed review.")}><span className="time-chip">{l(`平均保持率 ${summary?.averageRetention ?? 0}%`, `Avg. retention ${summary?.averageRetention ?? 0}%`)}</span></PageHeading><article className="passport-card"><div className="passport-glow" /><div className="relative z-10"><div className="flex items-start justify-between"><div><div className="flex items-center gap-2 text-sm text-cyan-300"><ShieldCheck className="size-4" /> {mastered.length ? l("已验证能力", "VERIFIED CAPABILITY") : l("尚未验证", "NOT YET VERIFIED")}</div><h2 className="mt-5 text-3xl font-medium tracking-[-0.04em] text-white">{mastered[0]?.nodeTitle ?? l("你的第一项已验证能力", "Your first verified capability")}</h2><p className="mt-2 text-slate-400">{mastered.length ? l(`${mastered.length} 个节点通过掌握验证`, `${mastered.length} nodes passed mastery verification`) : l("完成练习，并在隔天复习中再次答对即可获得。", "Pass practice, then answer correctly again in a review the next day.")}</p></div><div className="passport-seal"><Orbit /></div></div><div className="mt-12 grid gap-6 border-t border-white/10 pt-6 sm:grid-cols-4">{stats.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></div></article>{mastered.length ? <div className="grid gap-4 md:grid-cols-2">{mastered.map((record) => <article key={`${record.courseVersionId}:${record.nodeKey}`} className="surface-card flex items-center gap-4 p-5"><span className="source-icon"><Trophy /></span><div className="flex-1"><h2 className="text-sm font-medium text-white">{record.nodeTitle}</h2><p className="mt-1 text-xs text-slate-500">{l(`掌握度 ${record.score}% · 独立答对 ${record.unassistedPasses} 次 · 延迟复测 ${record.reviewPasses} 次`, `Mastery ${record.score}% · ${record.unassistedPasses} unassisted · ${record.reviewPasses} delayed reviews`)}</p></div><ChevronRight className="size-4 text-slate-600" /></article>)}</div> : <article className="ai-empty-state"><Trophy /><h2>{l("还没有已验证的能力", "No verified capabilities yet")}</h2><p>{l("一次答对不算掌握：需要独立完成练习，并在至少 20 小时后的复习中再次答对。", "One correct answer is not mastery: pass practice on your own, then again in a review at least 20 hours later.")}</p></article>}</div>;
 }
 
 function PageHeading({ kicker, title, detail, children }: { kicker: string; title: string; detail: string; children: React.ReactNode }) {
@@ -624,6 +680,19 @@ export function OneLearnApp() {
   const [generationState, setGenerationState] = useState<GenerationState>({ status: "idle" });
   const [identity, setIdentity] = useState<LearnerIdentity | null>(null);
   const [learnerStats, setLearnerStats] = useState<LearnerStats | null>(null);
+  const [mastery, setMastery] = useState<MasteryOverview | null>(null);
+  const masteryRef = useRef<MasteryOverview | null>(null);
+  const refreshMastery = useCallback(() => {
+    void oneLearnFetch(`/api/mastery?locale=${locale}`).then(async (response) => {
+      if (!response.ok) return;
+      const payload = await response.json() as MasteryOverview;
+      masteryRef.current = payload;
+      setMastery(payload);
+    }).catch(() => undefined);
+  }, [locale]);
+  useEffect(() => {
+    if (view === "dashboard" || view === "path" || view === "review" || view === "proof") refreshMastery();
+  }, [view, refreshMastery]);
   const [storage, setStorage] = useState<"durable" | "ephemeral">("ephemeral");
   const l = (zh: string, en: string) => pick(locale, zh, en);
 
@@ -733,10 +802,10 @@ export function OneLearnApp() {
         return {
           activeView: window.localStorage.getItem("onelearn-view") ?? "dashboard",
           locale: window.localStorage.getItem("onelearn-locale") ?? "zh",
-          pathMastery: 68,
-          verifiedNodes: 24,
-          retention: 91,
-          dueReviews: 3,
+          pathMastery: masteryRef.current?.summary.pathMastery ?? 0,
+          verifiedNodes: masteryRef.current?.summary.mastered ?? 0,
+          retention: masteryRef.current?.summary.averageRetention ?? 0,
+          dueReviews: masteryRef.current?.summary.due ?? 0,
           academies: academies.length,
           availableLearningPaths: courseCatalog.length,
         };
@@ -868,14 +937,14 @@ export function OneLearnApp() {
       <main className="min-h-[calc(100svh-4rem)] px-4 py-6 sm:px-7 lg:px-9 lg:py-8">
         {generationState.status === "loading" && <div className="ai-generation-toast" role="status"><LoaderCircle className="animate-spin" /><div><strong>{l("OpenAI 正在创建课程", "OpenAI is creating your course")}</strong><span>{l("正在生成知识地图、课节、首课内容与练习…", "Generating the knowledge map, lessons, first lesson, and practice…")}</span></div></div>}
         {generationState.status === "error" && <div className="ai-error-banner" role="alert"><TriangleAlert /><div><strong>{l("课程生成未完成", "Course generation did not complete")}</strong><span>{generationState.message}</span></div><button onClick={() => setGenerationState({ status: "idle" })} aria-label={l("关闭错误提示", "Dismiss error")}><X /></button></div>}
-        {view === "dashboard" && <Dashboard onNavigate={navigate} locale={locale} identity={identity} stats={learnerStats} storage={storage} />}
+        {view === "dashboard" && <Dashboard onNavigate={navigate} locale={locale} identity={identity} stats={learnerStats} storage={storage} mastery={mastery} />}
         {view === "catalog" && <CourseUniverse selectedCourse={selectedCourse} onSelectCourse={setSelectedCourse} onStartCourse={(course, goal) => void startCourse(course, goal)} locale={locale} generationState={generationState} />}
-        {view === "path" && <KnowledgeMap onNavigate={navigate} activeCourse={activeCourse} bundle={generatedCourse} locale={locale} onRegenerate={regenerateCourse} />}
+        {view === "path" && <KnowledgeMap onNavigate={navigate} activeCourse={activeCourse} bundle={generatedCourse} locale={locale} onRegenerate={regenerateCourse} mastery={mastery} />}
         {view === "learn" && <LearningRoom key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}`} locale={locale} bundle={generatedCourse} />}
-        {view === "practice" && <PracticeView key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}`} locale={locale} bundle={generatedCourse} />}
-        {view === "review" && <ReviewView locale={locale} />}
+        {view === "practice" && <PracticeView key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}`} locale={locale} bundle={generatedCourse} onAnswered={refreshMastery} />}
+        {view === "review" && <ReviewView locale={locale} bundle={generatedCourse} mastery={mastery} onAnswered={refreshMastery} onNavigate={navigate} />}
         {view === "library" && <LibraryView locale={locale} />}
-        {view === "proof" && <ProofView locale={locale} />}
+        {view === "proof" && <ProofView locale={locale} mastery={mastery} />}
         {view === "billing" && <BillingView locale={locale} />}
         {view === "operations" && <OperationsView locale={locale} />}
       </main>

@@ -118,7 +118,7 @@ export async function loadWorkspace(learner: LearnerIdentity) {
     db.prepare("SELECT COUNT(*) AS count FROM learning_events WHERE user_id = ?").bind(learner.userId),
     db.prepare("SELECT COUNT(*) AS count FROM source_documents WHERE user_id = ? AND status = 'ready'").bind(learner.userId),
     db.prepare("SELECT AVG(quality_score) AS average FROM course_versions WHERE user_id = ? AND quality_score IS NOT NULL").bind(learner.userId),
-    db.prepare("SELECT COUNT(*) AS count FROM mastery_states WHERE user_id = ? AND next_review_at <= ?").bind(learner.userId, nowSeconds()),
+    db.prepare("SELECT COUNT(*) AS count FROM mastery_records WHERE user_id = ? AND next_review_at <= ?").bind(learner.userId, nowSeconds()),
   ]);
   return {
     storage: "durable" as const,
@@ -135,6 +135,18 @@ export async function loadWorkspace(learner: LearnerIdentity) {
       dueReviews: Number((reviews.results?.[0] as CountRow | undefined)?.count ?? 0),
     },
   };
+}
+
+/** The stored bundle of a course version owned by this learner, or null. */
+export async function getOwnedCourseBundle(learner: LearnerIdentity, courseVersionId: string): Promise<GeneratedCourseBundle | null> {
+  const db = await getD1();
+  if (!db) {
+    const workspace = memoryStore.workspaces.get(learner.userId);
+    return workspace?.bundle.generation.courseVersionId === courseVersionId ? workspace.bundle : null;
+  }
+  const row = await db.prepare("SELECT bundle_json AS bundleJson FROM course_versions WHERE id = ? AND user_id = ?")
+    .bind(courseVersionId, learner.userId).first<{ bundleJson: string }>();
+  return safeJson<GeneratedCourseBundle>(row?.bundleJson);
 }
 
 export async function savePreference(learner: LearnerIdentity, locale: "zh" | "en", activeCourseVersionId?: string | null) {

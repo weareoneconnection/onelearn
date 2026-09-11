@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createStructuredResponse, getOpenAIModel, OpenAIConfigurationError, OpenAIResponseError, searchVectorStore } from "@/lib/onelearn/openai";
 import { getLearnerVectorStore, recordAiRun, recordLearningEvent, reserveAiUsage, resolveLearner, UsageLimitError } from "@/lib/onelearn/persistence";
 import { withApiErrors } from "@/lib/onelearn/api-errors";
+import { applyTutorEvidence } from "@/lib/onelearn/mastery-store";
 
 const requestSchema = z.object({
   message: z.string().min(1).max(8000),
@@ -13,6 +14,7 @@ const requestSchema = z.object({
   mastery: z.number().min(0).max(100).default(0),
   locale: z.enum(["zh", "en"]),
   courseVersionId: z.string().max(100).nullable().optional(),
+  lessonId: z.string().max(100).optional(),
   history: z.array(z.object({
     role: z.enum(["learner", "tutor"]),
     text: z.string().max(8000),
@@ -92,10 +94,15 @@ async function handlePOST(request: NextRequest) {
     });
     const output = tutorOutputSchema.parse(result.data);
     await recordAiRun({ learner, purpose: "tutor", promptVersion: "tutor-v3", model: result.model, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, latencyMs: result.latencyMs, status: "success", responseId: result.responseId, courseVersionId: data.courseVersionId });
-    await recordLearningEvent(learner, "tutor_turn", { node: data.node, evidence: output.evidence, action: output.pedagogicalAction }, data.courseVersionId);
+    await recordLearningEvent(learner, "tutor_turn", { node: data.node, lessonTitle: data.node, evidence: output.evidence, action: output.pedagogicalAction }, data.courseVersionId);
+    const mastery = data.courseVersionId && data.lessonId
+      ? await applyTutorEvidence(learner, { courseVersionId: data.courseVersionId, lessonId: data.lessonId, dimension: output.evidence.dimension, confidence: output.evidence.confidence })
+        .catch((error: unknown) => { console.error("Tutor evidence not applied:", error instanceof Error ? error.message : error); return null; })
+      : null;
     return NextResponse.json({
       mode: "live",
       ...output,
+      mastery,
       citations,
       generation: { responseId: result.responseId, model: result.model, usage: result.usage },
     });

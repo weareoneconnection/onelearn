@@ -216,3 +216,28 @@ export const aiRuns = sqliteTable("ai_runs", {
   index("idx_ai_runs_user_created").on(t.userId, t.createdAt),
   index("idx_ai_runs_status_created").on(t.status, t.createdAt),
 ]);
+
+// Evidence-driven mastery per learner × course version × lesson (see lib/onelearn/mastery.ts).
+export const masteryRecords = sqliteTable("mastery_records", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  courseVersionId: text("course_version_id").notNull().references(() => courseVersions.id),
+  nodeKey: text("node_key").notNull(),
+  nodeTitle: text("node_title").notNull(),
+  understanding: real("understanding").notNull().default(0),
+  recall: real("recall").notNull().default(0),
+  application: real("application").notNull().default(0),
+  transfer: real("transfer").notNull().default(0),
+  attempts: integer("attempts").notNull().default(0),
+  correctAttempts: integer("correct_attempts").notNull().default(0),
+  unassistedPasses: integer("unassisted_passes").notNull().default(0),
+  reviewPasses: integer("review_passes").notNull().default(0),
+  stabilityDays: real("stability_days").notNull().default(1),
+  firstPassAt: integer("first_pass_at"),
+  lastEvidenceAt: integer("last_evidence_at"),
+  nextReviewAt: integer("next_review_at"),
+  updatedAt: integer("updated_at").notNull(),
+}, (t) => [
+  uniqueIndex("mastery_records_user_course_node_unique").on(t.userId, t.courseVersionId, t.nodeKey),
+  index("idx_mastery_records_user_review").on(t.userId, t.nextReviewAt),
+]);
