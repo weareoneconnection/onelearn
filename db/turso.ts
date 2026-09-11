@@ -24,7 +24,15 @@ function toD1Result(result: ResultSet) {
 }
 
 class TursoStatement {
-  constructor(private readonly client: Promise<Client>, readonly sql: string, readonly args: InValue[] = []) {}
+  private readonly client: Promise<Client>;
+  readonly sql: string;
+  readonly args: InValue[];
+
+  constructor(client: Promise<Client>, sql: string, args: InValue[] = []) {
+    this.client = client;
+    this.sql = sql;
+    this.args = args;
+  }
 
   bind(...values: unknown[]) {
     return new TursoStatement(this.client, this.sql, values.map(normalizeArg));

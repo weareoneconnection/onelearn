@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createStructuredResponse, getOpenAIModel, OpenAIConfigurationError, OpenAIResponseError, searchVectorStore } from "@/lib/onelearn/openai";
 import { getLearnerVectorStore, recordAiRun, recordLearningEvent, reserveAiUsage, resolveLearner, UsageLimitError } from "@/lib/onelearn/persistence";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 const requestSchema = z.object({
   message: z.string().min(1).max(8000),
@@ -48,7 +49,7 @@ const tutorJsonSchema = {
   additionalProperties: false,
 };
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const raw = await request.json().catch(() => null);
   const parsed = requestSchema.safeParse(raw);
   const locale = raw && typeof raw === "object" && "locale" in raw && raw.locale === "en" ? "en" : "zh";
@@ -113,3 +114,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: data.locale === "zh" ? "OpenAI 导师暂时不可用" : "The OpenAI tutor is temporarily unavailable", code: "provider_error" }, { status: 502 });
   }
 }
+
+export const POST = withApiErrors("/api/tutor", handlePOST);

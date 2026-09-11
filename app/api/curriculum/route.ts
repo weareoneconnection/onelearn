@@ -13,6 +13,7 @@ import {
   saveQualityReport,
   UsageLimitError,
 } from "@/lib/onelearn/persistence";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 const requestSchema = z.object({
   courseId: z.string().min(1).max(240),
@@ -52,7 +53,7 @@ function fallbackQuality(locale: "zh" | "en", reason: string): QualityReport {
   };
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const raw = await request.json().catch(() => null);
   const parsed = requestSchema.safeParse(raw);
   const locale = raw && typeof raw === "object" && "locale" in raw && raw.locale === "en" ? "en" : "zh";
@@ -206,3 +207,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage(data.locale, "provider"), code: "provider_error" }, { status: 502 });
   }
 }
+
+export const POST = withApiErrors("/api/curriculum", handlePOST);

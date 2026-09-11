@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { recordLearningEvent, resolveLearner } from "@/lib/onelearn/persistence";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 const eventSchema = z.object({
   locale: z.enum(["zh", "en"]),
@@ -9,7 +10,7 @@ const eventSchema = z.object({
   payload: z.record(z.unknown()).default({}),
 });
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const raw = await request.json().catch(() => null);
   const parsed = eventSchema.safeParse(raw);
   if (!parsed.success) return NextResponse.json({ error: "Invalid learning event", code: "invalid_request" }, { status: 400 });
@@ -17,3 +18,5 @@ export async function POST(request: NextRequest) {
   await recordLearningEvent(learner, parsed.data.eventType, parsed.data.payload, parsed.data.courseVersionId);
   return NextResponse.json({ recorded: true });
 }
+
+export const POST = withApiErrors("/api/progress", handlePOST);

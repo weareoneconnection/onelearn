@@ -56,8 +56,10 @@ const memory = globalThis as typeof globalThis & {
 const memoryUsage = memory.__onelearnBillingMemory ??= new Map<string, number>();
 
 export class BillingLimitError extends Error {
-  constructor(public readonly code: BillingLimitCode) {
+  readonly code: BillingLimitCode;
+  constructor(code: BillingLimitCode) {
     super(code);
+    this.code = code;
   }
 }
 

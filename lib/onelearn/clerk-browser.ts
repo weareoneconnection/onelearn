@@ -49,6 +49,15 @@ export function loadClerk(locale: "zh" | "en" = "zh"): Promise<ClerkInstance | n
   return clerkPromise;
 }
 
+/** Clerk's __client_uat cookie is "0" (or absent) when signed out, so signed-out visitors need not wait for Clerk. */
+export function clerkMaybeSignedIn() {
+  if (!clerkEnabled || typeof document === "undefined") return false;
+  return document.cookie.split(";").some((part) => {
+    const [name, value] = part.trim().split("=");
+    return /^__client_uat(_.+)?$/.test(name ?? "") && Boolean(value) && value !== "0";
+  });
+}
+
 export async function clerkSessionToken() {
   const clerk = await loadClerk();
   return clerk?.session ? clerk.session.getToken() : null;

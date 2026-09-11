@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getBillingCustomerId, getBillingSummary } from "@/lib/onelearn/billing";
 import { resolveLearner } from "@/lib/onelearn/persistence";
 import { createBillingPortalSession, createCheckoutSession, StripeConfigurationError, StripeResponseError } from "@/lib/onelearn/stripe";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ function trustedOrigin(request: NextRequest) {
   throw new Error("invalid_site_url");
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const raw = await request.json().catch(() => null);
   const parsed = schema.safeParse(raw);
   const locale = raw && typeof raw === "object" && "locale" in raw && raw.locale === "en" ? "en" : "zh";
@@ -63,3 +64,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.data.locale === "zh" ? "暂时无法打开安全收银台" : "The secure checkout is temporarily unavailable", code: "checkout_failed" }, { status: 502 });
   }
 }
+
+export const POST = withApiErrors("/api/billing/checkout", handlePOST);

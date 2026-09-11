@@ -29,8 +29,10 @@ export type SourceRecord = {
 };
 
 export class UsageLimitError extends Error {
-  constructor(public readonly code: "daily_request_limit" | "daily_token_limit" | "monthly_credit_limit" | "source_limit" | "source_storage_limit") {
+  readonly code: "daily_request_limit" | "daily_token_limit" | "monthly_credit_limit" | "source_limit" | "source_storage_limit";
+  constructor(code: UsageLimitError["code"]) {
     super(code);
+    this.code = code;
   }
 }
 

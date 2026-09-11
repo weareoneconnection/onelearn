@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBillingCustomerId } from "@/lib/onelearn/billing";
 import { resolveLearner } from "@/lib/onelearn/persistence";
 import { createBillingPortalSession, StripeConfigurationError, StripeResponseError } from "@/lib/onelearn/stripe";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ function trustedOrigin(request: NextRequest) {
   return request.nextUrl.origin;
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const raw = await request.json().catch(() => null) as { locale?: string } | null;
   const locale = raw?.locale === "en" ? "en" : "zh";
   const learner = await resolveLearner(request, locale);
@@ -32,3 +33,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: locale === "zh" ? "暂时无法打开订阅管理" : "Subscription management is temporarily unavailable", code: "portal_failed" }, { status: 502 });
   }
 }
+
+export const POST = withApiErrors("/api/billing/portal", handlePOST);

@@ -19,6 +19,7 @@ import {
   saveSourceRecord,
   UsageLimitError,
 } from "@/lib/onelearn/persistence";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 const supportedExtensions = new Set(["c", "cpp", "cs", "css", "doc", "docx", "go", "html", "java", "js", "json", "md", "pdf", "php", "pptx", "py", "rb", "sh", "tex", "ts", "txt"]);
@@ -31,13 +32,13 @@ function safeFilename(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-160) || "source.txt";
 }
 
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   const locale = localeFrom(request);
   const learner = await resolveLearner(request, locale);
   return NextResponse.json(await listSources(learner));
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const locale = localeFrom(request);
   const learner = await resolveLearner(request, locale);
   const startedAt = Date.now();
@@ -124,3 +125,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: messages[code]?.[locale] ?? (locale === "zh" ? "资料索引失败，请稍后重试" : "Source indexing failed. Please try again."), code }, { status: 400 });
   }
 }
+
+export const GET = withApiErrors("/api/sources", handleGET);
+export const POST = withApiErrors("/api/sources", handlePOST);

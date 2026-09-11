@@ -28,7 +28,7 @@ import {
   levelName, pick, type Locale,
 } from "@/lib/onelearn/i18n";
 import type { GeneratedCourseBundle, GeneratedLesson } from "@/lib/onelearn/generated-course";
-import { clerkEnabled, clerkSessionToken, clerkSignOut, openClerkSignIn } from "@/lib/onelearn/clerk-browser";
+import { clerkEnabled, clerkMaybeSignedIn, clerkSessionToken, clerkSignOut, loadClerk, openClerkSignIn } from "@/lib/onelearn/clerk-browser";
 
 type View = "dashboard" | "catalog" | "path" | "learn" | "practice" | "review" | "library" | "proof" | "billing" | "operations";
 type WebModelContext = { registerTool: (tool: Record<string, unknown>, options?: { signal?: AbortSignal }) => void | Promise<void> };
@@ -67,7 +67,9 @@ function deviceId() {
 async function oneLearnFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("x-onelearn-device-id", deviceId());
-  const token = clerkEnabled ? await clerkSessionToken().catch(() => null) : null;
+  // Only wait for Clerk when a session may exist; signed-out visitors load immediately.
+  const token = clerkMaybeSignedIn() ? await clerkSessionToken().catch(() => null) : null;
+  if (clerkEnabled && !token) void loadClerk();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   return fetch(input, { ...init, headers });
 }
@@ -525,7 +527,7 @@ function BillingView({ locale }: { locale: Locale }) {
     <section className="team-plan"><div className="team-plan-icon"><Users /></div><div><div className="section-kicker">TEAM & ENTERPRISE</div><h2>{l("团队版 ¥79/人/月，企业版 ¥99,800/年起", "Team at ¥79/user/month; Enterprise from ¥99,800/year")}</h2><p>{l("团队知识库、成员管理、学习分析、权限与审计。10席起，企业方案支持 SSO、SLA 和定制集成。", "Shared knowledge bases, member administration, learning analytics, permissions, and audit logs. Team starts at 10 seats; Enterprise adds SSO, SLA, and custom integrations.")}</p></div><Button onClick={() => setNotice(l("团队与企业方案由管理员开通；商务联系入口将在企业资料确认后启用。", "Team and Enterprise plans are provisioned by an administrator; the sales contact opens after company details are confirmed."))} variant="outline" className="secondary-pill">{l("咨询企业方案", "Talk to sales")}</Button></section>
 
     {data && <section className="billing-ledger"><div className="ops-table-header"><div><div className="section-kicker">BILLING LEDGER</div><h2>{l("账单记录", "Billing history")}</h2></div><Receipt /></div>{data.billing.invoices.length ? <div className="overflow-x-auto"><table className="ops-table"><thead><tr><th>{l("日期", "Date")}</th><th>{l("金额", "Amount")}</th><th>{l("状态", "Status")}</th><th>{l("发票", "Invoice")}</th></tr></thead><tbody>{data.billing.invoices.map((invoice) => <tr key={invoice.id}><td>{new Date((invoice.paidAt ?? invoice.createdAt) * 1000).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</td><td>{invoice.currency.toUpperCase()} {(invoice.amountPaid / 100).toFixed(2)}</td><td><span className={cn("source-status", invoice.status === "paid" && "is-ready")}>{invoice.status}</span></td><td>{invoice.hostedInvoiceUrl ? <a href={invoice.hostedInvoiceUrl} target="_blank" rel="noreferrer">{l("查看", "Open")}</a> : "—"}</td></tr>)}</tbody></table></div> : <div className="ops-empty">{l("还没有账单。首次成功付款后会自动出现在这里。", "No invoices yet. Your first successful payment will appear here automatically.")}</div>}</section>}
-    <p className="billing-fineprint">{l("订阅由安全托管收银台处理。AI 点数按自然月重置，失败的支付不会提升套餐权益。", "Subscriptions are handled by a secure hosted checkout. AI credits reset each calendar month, and failed payments never unlock plan entitlements.")}</p>
+    <p className="billing-fineprint">{l("订阅由安全托管收银台处理。AI 点数按自然月重置，失败的支付不会提升套餐权益。开通即表示你同意", "Subscriptions are handled by a secure hosted checkout. AI credits reset each calendar month, and failed payments never unlock plan entitlements. By subscribing you agree to the")} <a href="/terms" target="_blank">{l("《用户协议》", "Terms")}</a>{l("、", ", ")}<a href="/privacy" target="_blank">{l("《隐私政策》", "Privacy Policy")}</a>{l("与", " and ")}<a href="/refund" target="_blank">{l("《退款规则》", "Refund Policy")}</a>{l("。", ".")}</p>
   </div>;
 }
 

@@ -17,6 +17,7 @@ import {
   StripeResponseError,
   verifyStripeWebhook,
 } from "@/lib/onelearn/stripe";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,7 @@ async function processEvent(type: string, object: Record<string, unknown>) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const rawBody = await request.text();
   try {
     const event = await verifyStripeWebhook(rawBody, request.headers.get("stripe-signature"));
@@ -109,3 +110,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "webhook_processing_failed" }, { status: 500 });
   }
 }
+
+export const POST = withApiErrors("/api/billing/webhook", handlePOST);

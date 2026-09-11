@@ -3,6 +3,7 @@ import { z } from "zod";
 import { lessonJsonSchema, lessonSchema } from "@/lib/onelearn/generated-course";
 import { createStructuredResponse, getOpenAIModel, OpenAIConfigurationError, OpenAIResponseError, searchVectorStore } from "@/lib/onelearn/openai";
 import { getLearnerVectorStore, recordAiRun, reserveAiUsage, resolveLearner, UsageLimitError } from "@/lib/onelearn/persistence";
+import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 const requestSchema = z.object({
   locale: z.enum(["zh", "en"]),
@@ -19,7 +20,7 @@ const requestSchema = z.object({
   courseVersionId: z.string().max(100).nullable().optional(),
 });
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const raw = await request.json().catch(() => null);
   const parsed = requestSchema.safeParse(raw);
   const locale = raw && typeof raw === "object" && "locale" in raw && raw.locale === "en" ? "en" : "zh";
@@ -71,3 +72,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: data.locale === "zh" ? "OpenAI 暂时无法生成课节" : "OpenAI could not generate the lesson", code: "provider_error" }, { status: 502 });
   }
 }
+
+export const POST = withApiErrors("/api/lesson", handlePOST);
