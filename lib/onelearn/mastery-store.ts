@@ -2,6 +2,8 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { getD1 } from "@/db";
 import { applyAnswer, applyTutorSignal, emptyMasteryState, evaluateMastery, type EvidenceDimension, type MasteryState } from "./mastery";
 import { getOwnedCourseBundle, recordLearningEvent, type LearnerIdentity } from "./persistence";
+import { flattenLessons } from "./generated-course";
+import { getStoredLesson } from "./lessons";
 
 export class MasteryInputError extends Error {
   readonly code: "course_not_found" | "lesson_not_found" | "question_not_found";
@@ -74,8 +76,8 @@ export async function recordPracticeAnswer(learner: LearnerIdentity, input: {
   const now = input.now ?? nowSeconds();
   const bundle = await getOwnedCourseBundle(learner, input.courseVersionId);
   if (!bundle) throw new MasteryInputError("course_not_found");
-  const lesson = bundle.curriculum.firstLesson;
-  if (lesson.id !== input.lessonId) throw new MasteryInputError("lesson_not_found");
+  const lesson = await getStoredLesson(learner, bundle, input.courseVersionId, input.lessonId);
+  if (!lesson) throw new MasteryInputError("lesson_not_found");
   const question = lesson.practice.find((item) => item.id === input.questionId);
   if (!question) throw new MasteryInputError("question_not_found");
   const correct = input.selected === question.correctOption;
@@ -105,8 +107,7 @@ export async function applyTutorEvidence(learner: LearnerIdentity, input: {
   const now = input.now ?? nowSeconds();
   const bundle = await getOwnedCourseBundle(learner, input.courseVersionId);
   if (!bundle) return null;
-  const outline = bundle.curriculum.modules.flatMap((module) => module.lessons).find((lesson) => lesson.id === input.lessonId);
-  const title = bundle.curriculum.firstLesson.id === input.lessonId ? bundle.curriculum.firstLesson.title : outline?.title;
+  const title = flattenLessons(bundle.curriculum).find((lesson) => lesson.id === input.lessonId)?.title;
   if (!title) return null;
   const db = await getD1();
   const current = await loadRecord(db, learner, input.courseVersionId, input.lessonId);

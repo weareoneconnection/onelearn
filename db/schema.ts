@@ -257,3 +257,14 @@ export const feedback = sqliteTable("feedback", {
   index("idx_feedback_status_created").on(t.status, t.createdAt),
   index("idx_feedback_user_created").on(t.userId, t.createdAt),
 ]);
+
+// Lessons generated on demand after the first one (the first lesson lives in the course bundle).
+export const lessonContents = sqliteTable("lesson_contents", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  courseVersionId: text("course_version_id").notNull().references(() => courseVersions.id),
+  lessonId: text("lesson_id").notNull(),
+  lessonJson: text("lesson_json").notNull(),
+  responseId: text("response_id"),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [uniqueIndex("lesson_contents_course_lesson_unique").on(t.courseVersionId, t.lessonId)]);

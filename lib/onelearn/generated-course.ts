@@ -56,6 +56,30 @@ export const curriculumSchema = z.object({
 export type GeneratedLesson = z.infer<typeof lessonSchema>;
 export type GeneratedCurriculum = z.infer<typeof curriculumSchema>;
 
+export type LessonOutline = {
+  id: string;
+  title: string;
+  objective: string;
+  durationMinutes: number;
+  moduleIndex: number;
+  moduleTitle: string;
+  lessonIndex: number;
+};
+
+/**
+ * Every lesson in course order. The detailed firstLesson always occupies the first
+ * slot, even when the model gave it an id that differs from the first outline entry.
+ */
+export function flattenLessons(curriculum: GeneratedCurriculum): LessonOutline[] {
+  const flat = curriculum.modules.flatMap((module, moduleIndex) => module.lessons.map((lesson, lessonIndex) => ({
+    id: lesson.id, title: lesson.title, objective: lesson.objective, durationMinutes: lesson.durationMinutes,
+    moduleIndex, moduleTitle: module.title, lessonIndex,
+  })));
+  const first = curriculum.firstLesson;
+  if (flat.length && !flat.some((lesson) => lesson.id === first.id)) flat[0] = { ...flat[0], id: first.id, title: first.title };
+  return flat;
+}
+
 export const qualityReportSchema = z.object({
   overallScore: z.number().min(0).max(100),
   status: z.enum(["passed", "review", "blocked"]),

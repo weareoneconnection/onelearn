@@ -21,6 +21,7 @@ import { LearningRoom, PracticeView, ReviewView } from "@/components/onelearn/le
 import { LibraryView } from "@/components/onelearn/library";
 import { NewGoalDialog } from "@/components/onelearn/new-goal-dialog";
 import { OperationsView } from "@/components/onelearn/operations";
+import { courseProgress } from "@/components/onelearn/progress";
 import { ProofView } from "@/components/onelearn/proof";
 import type { GenerationState, LearnerIdentity, LearnerStats, MasteryOverview, View, WebModelContext } from "@/components/onelearn/types";
 import { Brand, LocaleSwitch } from "@/components/onelearn/ui";
@@ -48,9 +49,20 @@ export function OneLearnApp() {
     }).catch(() => undefined);
   }, [locale]);
   useEffect(() => {
-    if (view === "dashboard" || view === "path" || view === "review" || view === "proof") refreshMastery();
+    if (view === "dashboard" || view === "path" || view === "learn" || view === "practice" || view === "review" || view === "proof") refreshMastery();
   }, [view, refreshMastery]);
   const [storage, setStorage] = useState<"durable" | "ephemeral">("ephemeral");
+  // The lesson being studied. Without an explicit choice, the recommended next lesson is used.
+  const [lessonSelection, setLessonSelection] = useState<{ course: string; id: string } | null>(null);
+  const lessonProgress = useMemo(() => generatedCourse ? courseProgress(generatedCourse, mastery) : null, [generatedCourse, mastery]);
+  const currentLessonId = generatedCourse && lessonSelection?.course === generatedCourse.generation.responseId
+    ? lessonSelection.id
+    : lessonProgress?.recommendedId ?? null;
+  const openLesson = (lessonId: string) => {
+    if (generatedCourse) setLessonSelection({ course: generatedCourse.generation.responseId, id: lessonId });
+    setView("learn");
+    window.localStorage.setItem("onelearn-view", "learn");
+  };
   const l = (zh: string, en: string) => pick(locale, zh, en);
 
   useEffect(() => {
@@ -200,6 +212,10 @@ export function OneLearnApp() {
     });
   };
   const navigate = (next: View) => {
+    // Pin the recommended lesson on entry so a later recommendation change does not swap the page mid-study.
+    if ((next === "learn" || next === "practice") && generatedCourse && lessonSelection?.course !== generatedCourse.generation.responseId && lessonProgress) {
+      setLessonSelection({ course: generatedCourse.generation.responseId, id: lessonProgress.recommendedId });
+    }
     setView(next);
     window.localStorage.setItem("onelearn-view", next);
   };
@@ -296,10 +312,10 @@ export function OneLearnApp() {
         {generationState.status === "error" && <div className="ai-error-banner" role="alert"><TriangleAlert /><div><strong>{l("课程生成未完成", "Course generation did not complete")}</strong><span>{generationState.message}</span></div><button onClick={() => setGenerationState({ status: "idle" })} aria-label={l("关闭错误提示", "Dismiss error")}><X /></button></div>}
         {view === "dashboard" && <Dashboard onNavigate={navigate} locale={locale} identity={identity} stats={learnerStats} storage={storage} mastery={mastery} />}
         {view === "catalog" && <CourseUniverse selectedCourse={selectedCourse} onSelectCourse={setSelectedCourse} onStartCourse={(course, goal) => void startCourse(course, goal)} locale={locale} generationState={generationState} />}
-        {view === "path" && <KnowledgeMap onNavigate={navigate} activeCourse={activeCourse} bundle={generatedCourse} locale={locale} onRegenerate={regenerateCourse} mastery={mastery} />}
-        {view === "learn" && <LearningRoom key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}`} locale={locale} bundle={generatedCourse} />}
-        {view === "practice" && <PracticeView key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}`} locale={locale} bundle={generatedCourse} onAnswered={refreshMastery} />}
-        {view === "review" && <ReviewView locale={locale} bundle={generatedCourse} mastery={mastery} onAnswered={refreshMastery} onNavigate={navigate} />}
+        {view === "path" && <KnowledgeMap onNavigate={navigate} onOpenLesson={openLesson} activeCourse={activeCourse} bundle={generatedCourse} locale={locale} onRegenerate={regenerateCourse} mastery={mastery} />}
+        {view === "learn" && <LearningRoom key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}-${currentLessonId ?? "first"}`} locale={locale} bundle={generatedCourse} lessonId={currentLessonId} mastery={mastery} onOpenLesson={openLesson} onNavigate={navigate} />}
+        {view === "practice" && <PracticeView key={`${locale}-${generatedCourse?.generation.responseId ?? "demo"}-${currentLessonId ?? "first"}`} locale={locale} bundle={generatedCourse} lessonId={currentLessonId} onAnswered={refreshMastery} onNavigate={navigate} />}
+        {view === "review" && <ReviewView locale={locale} bundle={generatedCourse} mastery={mastery} onAnswered={refreshMastery} onNavigate={navigate} onOpenLesson={openLesson} />}
         {view === "library" && <LibraryView locale={locale} />}
         {view === "proof" && <ProofView locale={locale} mastery={mastery} />}
         {view === "billing" && <BillingView locale={locale} />}
