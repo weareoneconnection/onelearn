@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const locale = raw && typeof raw === "object" && "locale" in raw && raw.locale === "en" ? "en" : "zh";
   if (!parsed.success) return NextResponse.json({ error: locale === "zh" ? "套餐选择不正确" : "Invalid plan selection", code: "invalid_request" }, { status: 400 });
   const learner = await resolveLearner(request, parsed.data.locale);
-  if (learner.mode !== "chatgpt") {
+  if (learner.mode === "device") {
     return NextResponse.json({
       error: parsed.data.locale === "zh" ? "请先登录，再开通会员" : "Sign in before starting a subscription",
       code: "authentication_required",

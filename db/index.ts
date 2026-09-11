@@ -1,6 +1,7 @@
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
+import { createTursoDatabase } from "./turso";
 
 export type OneLearnRuntimeBindings = {
   DB?: D1Database;
@@ -33,8 +34,16 @@ export async function getDb() {
   return DB ? drizzle(DB, { schema }) : null;
 }
 
+let turso: D1Database | null = null;
+
+/** D1 binding on Cloudflare; Turso (via a D1-compatible facade) when TURSO_DATABASE_URL is set; otherwise null. */
 export async function getD1() {
-  return (await getRuntimeBindings()).DB ?? null;
+  const { DB } = await getRuntimeBindings();
+  if (DB) return DB;
+  const url = process.env.TURSO_DATABASE_URL?.trim();
+  if (!url) return null;
+  turso ??= createTursoDatabase(url, process.env.TURSO_AUTH_TOKEN?.trim());
+  return turso;
 }
 
 export async function getSourceBucket() {

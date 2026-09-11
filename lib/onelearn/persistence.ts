@@ -4,12 +4,13 @@ import { getD1 } from "@/db";
 import { assertSourceCapacity, BillingLimitError, consumeAiCredits, getBillingAdminMetrics, refundAiCredits, type BillableAction } from "./billing";
 import type { GeneratedCourseBundle } from "./generated-course";
 import { clientIpFromHeaders, hashClientKey } from "./identity";
+import { getClerkLearner } from "./clerk-auth";
 
 export type LearnerIdentity = {
   userId: string;
   email: string;
   displayName: string;
-  mode: "chatgpt" | "device";
+  mode: "chatgpt" | "clerk" | "device";
   /** Hashed client IP; set for device learners to enforce the per-IP anonymous cap. */
   clientKey?: string;
 };
@@ -58,6 +59,12 @@ const safeJson = <T>(value: string | null | undefined): T | null => {
 
 export async function resolveLearner(request: Request, locale: "zh" | "en" = "zh"): Promise<LearnerIdentity> {
   const chatgptUser = await getChatGPTUser();
+  const clerkUser = chatgptUser ? null : await getClerkLearner(request);
+  if (clerkUser) {
+    const learner: LearnerIdentity = { ...clerkUser, mode: "clerk" };
+    await ensureUser(learner, locale);
+    return learner;
+  }
   const deviceId = request.headers.get("x-onelearn-device-id")?.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80) || "anonymous";
   const learner: LearnerIdentity = chatgptUser ? {
     userId: chatgptUser.userId,

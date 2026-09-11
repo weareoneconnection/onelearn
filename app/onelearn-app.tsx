@@ -28,11 +28,12 @@ import {
   levelName, pick, type Locale,
 } from "@/lib/onelearn/i18n";
 import type { GeneratedCourseBundle, GeneratedLesson } from "@/lib/onelearn/generated-course";
+import { clerkEnabled, clerkSessionToken, clerkSignOut, openClerkSignIn } from "@/lib/onelearn/clerk-browser";
 
 type View = "dashboard" | "catalog" | "path" | "learn" | "practice" | "review" | "library" | "proof" | "billing" | "operations";
 type WebModelContext = { registerTool: (tool: Record<string, unknown>, options?: { signal?: AbortSignal }) => void | Promise<void> };
 type GenerationState = { status: "idle" | "loading" | "error"; message?: string };
-type LearnerIdentity = { displayName: string; email: string; mode: "chatgpt" | "device"; admin: boolean };
+type LearnerIdentity = { displayName: string; email: string; mode: "chatgpt" | "clerk" | "device"; admin: boolean };
 type LearnerStats = { courseVersions: number; learningEvents: number; sources: number; averageQuality: number; dueReviews: number };
 type SourceItem = { id: string; name: string; sourceKind: "file" | "text" | "web"; mimeType: string; sizeBytes: number; sourceUrl: string | null; status: "processing" | "ready" | "failed"; createdAt: number };
 type OperationsSnapshot = {
@@ -41,7 +42,7 @@ type OperationsSnapshot = {
 };
 type BillingPlan = { id: "free" | "personal" | "pro" | "team"; nameZh: string; nameEn: string; monthlyPriceCny: number | null; annualPriceCny: number | null; aiCredits: number; sourceCount: number; sourceBytes: number; courseEquivalent: number; tutorEquivalent: number };
 type BillingPayload = {
-  identity: { displayName: string; email: string; mode: "chatgpt" | "device" };
+  identity: { displayName: string; email: string; mode: "chatgpt" | "clerk" | "device" };
   plans: BillingPlan[];
   billing: {
     configured: boolean;
@@ -63,10 +64,17 @@ function deviceId() {
   return created;
 }
 
-function oneLearnFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+async function oneLearnFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("x-onelearn-device-id", deviceId());
+  const token = clerkEnabled ? await clerkSessionToken().catch(() => null) : null;
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   return fetch(input, { ...init, headers });
+}
+
+function signIn(returnTo: string) {
+  if (clerkEnabled) void openClerkSignIn(new URL(returnTo, window.location.origin).href);
+  else window.top?.location.assign(`/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`);
 }
 
 const navItems = [
@@ -453,7 +461,7 @@ function BillingView({ locale }: { locale: Locale }) {
         body: JSON.stringify({ planId, interval, locale }),
       });
       const payload = await response.json() as { url?: string; signInUrl?: string; error?: string };
-      if (response.status === 401 && payload.signInUrl) { window.location.assign(payload.signInUrl); return; }
+      if (response.status === 401 && payload.signInUrl) { setBusy(""); signIn("/?view=billing"); return; }
       if (!response.ok || !payload.url) throw new Error(payload.error || l("暂时无法打开安全收银台", "The secure checkout is temporarily unavailable"));
       window.location.assign(payload.url);
     } catch (checkoutError) {
@@ -494,7 +502,8 @@ function BillingView({ locale }: { locale: Locale }) {
 
     {notice && <div className="billing-notice"><Check />{notice}</div>}
     {error && <div className="ai-error-banner" role="alert"><TriangleAlert /><div><strong>{l("计费操作未完成", "Billing action did not complete")}</strong><span>{error}</span></div><button onClick={() => setError("")} aria-label={l("关闭", "Dismiss")}><X /></button></div>}
-    {data?.identity.mode === "device" && <section className="billing-signin"><Cloud /><div><strong>{l("登录后开通并跨设备使用", "Sign in to subscribe and sync across devices")}</strong><p>{l("登录前仍可使用免费版；会员与账单只绑定到你的安全账户。", "You can keep using Free before signing in; subscriptions and invoices are attached only to your secure account.")}</p></div><a href="/signin-with-chatgpt?return_to=%2F%3Fview%3Dbilling" target="_top">{l("登录", "Sign in")}</a></section>}
+    {data?.identity.mode === "device" && <section className="billing-signin"><Cloud /><div><strong>{l("登录后开通并跨设备使用", "Sign in to subscribe and sync across devices")}</strong><p>{l("登录前仍可使用免费版；会员与账单只绑定到你的安全账户。", "You can keep using Free before signing in; subscriptions and invoices are attached only to your secure account.")}</p></div><a href="/signin-with-chatgpt?return_to=%2F%3Fview%3Dbilling" target="_top" onClick={(event) => { event.preventDefault(); signIn("/?view=billing"); }}>{l("登录", "Sign in")}</a></section>}
+    {data?.identity.mode === "clerk" && <section className="billing-signin"><Cloud /><div><strong>{data.identity.email}</strong><p>{l("已登录，学习档案与会员跨设备同步。", "Signed in. Your learning profile and membership sync across devices.")}</p></div><a href="#" onClick={(event) => { event.preventDefault(); void clerkSignOut(); }}>{l("退出登录", "Sign out")}</a></section>}
 
     <div className="billing-switch" role="group" aria-label={l("计费周期", "Billing interval")}><button className={cn(interval === "month" && "is-active")} onClick={() => setInterval("month")}>{l("月付", "Monthly")}</button><button className={cn(interval === "year" && "is-active")} onClick={() => setInterval("year")}>{l("年付 · 省 28%", "Annual · save 28%")}</button></div>
     <section className="pricing-grid">
