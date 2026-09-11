@@ -148,3 +148,102 @@ button { cursor: pointer; } button:disabled { cursor: not-allowed; }
 .legal-doc h2 { margin-top: 1.75rem; color: #e6eef6; font-size: 1.05rem; font-weight: 600; }
 .legal-doc p { margin-top: .6rem; font-size: .92rem; }
 .legal-updated { color: #5d7188; font-size: .8rem !important; }
+
+/* Mobile readability floor: raises every sub-12px text style to 12px on phones (generated). */
+@media (max-width: 767px) {
+  .section-kicker,
+  .eyebrow,
+  .orbit-core span,
+  .mission-step span,
+  .chart-column span,
+  .knowledge-node small,
+  .map-legend span,
+  .concept-compare span,
+  .concept-compare code,
+  .concept-compare small,
+  .message span,
+  .mastery-signal,
+  .question-type,
+  .status-chip,
+  .source-row p,
+  .passport-card [class*="sm:grid-cols-4"] span,
+  .goal-kind span,
+  .command-button kbd,
+  .locale-switch button,
+  .catalog-scale span,
+  .dynamic-card small,
+  .dynamic-card > div span,
+  .academy-count,
+  .academy-card > p,
+  .academy-samples span,
+  .academy-open,
+  .group-tabs button,
+  .course-level,
+  .course-kind,
+  .course-card > p,
+  .course-card > div:last-child,
+  .course-original,
+  .path-preview p,
+  .dynamic-example span,
+  .dynamic-outputs span,
+  .command-result small,
+  .future-scale span,
+  .catalog-roadmap li p,
+  .ai-generation-note,
+  .dynamic-prompt-label,
+  .ai-generation-toast span,
+  .ai-error-banner span,
+  .ai-provenance p,
+  .provenance-metrics span,
+  .source-status,
+  .source-form label > span,
+  .source-divider span,
+  .source-error,
+  .ops-metrics span,
+  .ops-metrics small,
+  .ops-table-header > span,
+  .ops-table th,
+  .ops-table td,
+  .lesson-key-points > span,
+  .worked-example > span,
+  .worked-example li i,
+  .billing-usage-card > div:first-child span,
+  .billing-credit-number span,
+  .billing-usage-meta span,
+  .billing-manage,
+  .billing-signin p,
+  .billing-switch button,
+  .pricing-recommend,
+  .pricing-title p,
+  .pricing-value span,
+  .pricing-saving,
+  .pricing-card li,
+  .team-plan p,
+  .billing-fineprint { font-size: .75rem; }
+}
+
+/* Dialogs never exceed the viewport. */
+[data-slot="dialog-content"] { max-height: calc(100svh - 2rem); overflow-y: auto; }
+
+/* Mobile: comfortable tap targets, no iOS focus zoom, compact learning room. */
+@media (max-width: 767px) {
+  .locale-switch button { min-width: 2.25rem; min-height: 2.25rem; }
+  .command-button { min-width: 2.5rem; min-height: 2.5rem; justify-content: center; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select, .tutor-input-wrap textarea { font-size: 16px; }
+  .learning-layout { min-height: 0; border-radius: 1rem; }
+  .lesson-body { min-height: 0 !important; padding: 1.5rem 1.25rem; }
+  .lesson-body h2 { font-size: 1.75rem; }
+  .tutor-panel { min-height: 0; }
+  .tutor-thread { max-height: 55svh; }
+  .tutor-input-wrap { position: sticky; bottom: calc(4.5rem + env(safe-area-inset-bottom)); z-index: 5; background: #0d1826; }
+  .answer-option { min-height: 3.25rem; }
+}
+
+/* Mobile readability floor for rules using the font shorthand (generated), and iOS-zoom-safe filters. */
+@media (max-width: 767px) {
+  .academy-index,
+  .path-preview span,
+  .catalog-roadmap li span { font-size: .75rem; }
+  .catalog-toolbar select { font-size: 16px; }
+  .billing-switch button, .billing-signin a { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; }
+}

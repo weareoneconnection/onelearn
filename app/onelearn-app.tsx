@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, ChevronRight, CircleHelp, Cloud, Database, LibraryBig, LoaderCircle, Search, Settings, TriangleAlert, X } from "lucide-react";
+import { ChevronRight, CircleHelp, Cloud, Database, LibraryBig, LoaderCircle, Search, Settings, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { generatedCourseKey, navItems, oneLearnFetch } from "@/components/onelea
 import { CourseUniverse } from "@/components/onelearn/course-universe";
 import { Dashboard } from "@/components/onelearn/dashboard";
 import { FeedbackDialog } from "@/components/onelearn/feedback-dialog";
+import { MobileTabBar } from "@/components/onelearn/mobile-tab-bar";
 import { KnowledgeMap } from "@/components/onelearn/knowledge-map";
 import { LearningRoom, PracticeView, ReviewView } from "@/components/onelearn/learning";
 import { LibraryView } from "@/components/onelearn/library";
@@ -288,8 +289,8 @@ export function OneLearnApp() {
       <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><button onClick={() => navigate("billing")} className="flex items-center gap-3 rounded-xl p-2 text-left hover:bg-white/5 group-data-[collapsible=icon]:justify-center"><span className="flex size-8 items-center justify-center rounded-lg bg-white/7 text-xs font-semibold text-cyan-200">{identity?.displayName?.slice(0, 2).toUpperCase() ?? "OL"}</span><div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><p className="truncate text-xs font-medium text-slate-200">{identity?.displayName ?? l("学习者", "Learner")}</p><p className="flex items-center gap-1 text-[11px] text-slate-600">{storage === "durable" ? <Cloud className="size-3" /> : <Database className="size-3" />}{storage === "durable" ? l("云端学习档案", "Cloud learning profile") : l("设备模式", "Device mode")}</p></div><Settings aria-label={l("套餐与账单", "Plans and billing")} className="size-4 text-slate-600 group-data-[collapsible=icon]:hidden" /></button></SidebarFooter>
     </Sidebar>
     <SidebarInset className="min-w-0 bg-[#060b13]">
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/7 bg-[#060b13]/90 px-4 backdrop-blur-xl sm:px-7"><SidebarTrigger aria-label={l("切换侧边栏", "Toggle sidebar")} className="text-slate-400 hover:bg-white/5 hover:text-white" /><div className="h-5 w-px bg-white/8" /><span className="text-sm text-slate-400">{title}</span><div className="ml-auto flex items-center gap-2"><LocaleSwitch locale={locale} onChange={changeLocale} /><button onClick={() => setCommandOpen(true)} className="command-button"><Search /><span className="hidden sm:inline">{l("全局搜索", "Search anything")}</span><kbd className="hidden lg:inline">⌘ K</kbd></button><Button variant="ghost" size="icon-sm" aria-label={l("帮助与反馈", "Help & feedback")} onClick={() => setFeedbackOpen(true)} className="text-slate-500 hover:bg-white/5 hover:text-white"><CircleHelp /></Button><Button variant="ghost" size="icon-sm" aria-label={l("通知", "Notifications")} className="relative text-slate-500 hover:bg-white/5 hover:text-white"><Bell /><i className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-cyan-300" /></Button></div></header>
-      <main className="min-h-[calc(100svh-4rem)] px-4 py-6 sm:px-7 lg:px-9 lg:py-8">
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/7 bg-[#060b13]/90 px-4 backdrop-blur-xl sm:px-7"><SidebarTrigger aria-label={l("切换侧边栏", "Toggle sidebar")} className="size-10 text-slate-400 hover:bg-white/5 hover:text-white md:size-7" /><div className="h-5 w-px bg-white/8" /><span className="min-w-0 truncate text-sm text-slate-400">{title}</span><div className="ml-auto flex items-center gap-2"><LocaleSwitch locale={locale} onChange={changeLocale} /><button onClick={() => setCommandOpen(true)} className="command-button"><Search /><span className="hidden sm:inline">{l("全局搜索", "Search anything")}</span><kbd className="hidden lg:inline">⌘ K</kbd></button><Button variant="ghost" size="icon-sm" aria-label={l("帮助与反馈", "Help & feedback")} onClick={() => setFeedbackOpen(true)} className="size-10 text-slate-500 hover:bg-white/5 hover:text-white md:size-8"><CircleHelp /></Button></div></header>
+      <main className="min-h-[calc(100svh-4rem)] px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-7 md:pb-8 lg:px-9 lg:py-8">
         {generationState.status === "loading" && <div className="ai-generation-toast" role="status"><LoaderCircle className="animate-spin" /><div><strong>{l("OpenAI 正在创建课程", "OpenAI is creating your course")}</strong><span>{l("正在生成知识地图、课节、首课内容与练习…", "Generating the knowledge map, lessons, first lesson, and practice…")}</span></div></div>}
         {generationState.status === "error" && <div className="ai-error-banner" role="alert"><TriangleAlert /><div><strong>{l("课程生成未完成", "Course generation did not complete")}</strong><span>{generationState.message}</span></div><button onClick={() => setGenerationState({ status: "idle" })} aria-label={l("关闭错误提示", "Dismiss error")}><X /></button></div>}
         {view === "dashboard" && <Dashboard onNavigate={navigate} locale={locale} identity={identity} stats={learnerStats} storage={storage} mastery={mastery} />}
@@ -303,6 +304,7 @@ export function OneLearnApp() {
         {view === "billing" && <BillingView locale={locale} />}
         {view === "operations" && <OperationsView locale={locale} />}
       </main>
+      <MobileTabBar view={view} locale={locale} dueReviews={mastery?.summary.due ?? 0} onNavigate={navigate} />
     </SidebarInset>
     <FeedbackDialog locale={locale} open={feedbackOpen} onOpenChange={setFeedbackOpen} page={view} />
     <Dialog open={commandOpen} onOpenChange={(open) => { setCommandOpen(open); if (!open) setCommandQuery(""); }}>
