@@ -19,7 +19,7 @@ Goal → Diagnose → Plan → Teach → Practice → Assess → Evidence → Re
 
 ## 2. 系统边界
 
-OneLearn 独立拥有身份、数据、AI 教学、内容、计费和部署，不依赖其他 OneAI 产品。外部模型仅通过可替换的 HTTP Provider 接口调用。
+OneLearn 独立拥有身份、数据、AI 教学、内容、计费和部署，不依赖其他 OneAI 产品。当前生成链路通过服务端 OpenAI Responses API 调用，浏览器永远不接触 API 密钥。
 
 ## 3. 逻辑模块
 
@@ -89,6 +89,8 @@ Queue / Workers ── Document Processing
 
 AI 只提出证据建议。Mastery Engine 根据历史、多次评估、时间间隔与评估可信度决定状态变化。
 
+课程生成、课节生成和导师响应均使用 Structured Outputs。服务端以 JSON Schema 限制输出结构，再以运行时 Schema 二次校验；模型拒绝、不完整响应、超时、无效结构和未配置密钥都必须显式失败，不能回退成伪装的“AI 结果”。
+
 ## 7. 生产数据规则
 
 - 路径、课程、题目、Rubric 和 Prompt 必须版本化。
@@ -106,7 +108,9 @@ AI 只提出证据建议。Mastery Engine 根据历史、多次评估、时间�
 
 Demo 目录由 `lib/onelearn/catalog.ts` 提供，完整收录 32 个学院和附件定义的 953 个课程主题/学习模板。语言方向与考试学习体系会进一步展开为 1,328 条可检索学习路径，其中包含 936 门标准课程、144 条语言专属路径与 248 个考试学习模块。所有目录项都有英文显示名；英文模式保留中文原名作为来源对照。
 
-目录只是入口。用户还可通过三种 Curriculum Factory 模式生成非固定课程：目标生成、资料生成和结果反推。生成后的课程仍然进入统一的 Diagnose → Plan → Teach → Practice → Assess → Evidence → Review 闭环。
+目录只是入口，不保存 1,328 门静态教材。用户选择任意目录课程，或使用目标生成、资料生成和结果反推模式后，Curriculum Engine 会按需生成模块、课节、首课正文、示例、检查问题和练习。后续课节按学习位置继续生成，AI Tutor 使用当前课程目标、参考答案、掌握度和最近对话作为上下文。
+
+生成结果记录模型、响应 ID、生成时间、语言与依据类型，并缓存在当前设备。未提供外部资料时必须明确标记为模型知识生成；重要事实和高风险内容仍需可信来源或人工复核。
 
 ## 9. 上线顺序
 

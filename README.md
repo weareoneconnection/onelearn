@@ -13,34 +13,29 @@ npm install
 npm run dev
 ```
 
-打开终端显示的本地地址即可。首次启动不需要数据库、账号或模型密钥，系统会使用完整 Demo 数据。
+打开终端显示的本地地址即可。课程目录无需密钥即可浏览；生成课程、生成课节和 AI 导师需要 OpenAI API 密钥。
 
-## 接入真实 AI 导师
+## 接入 OpenAI 课程引擎
 
-复制环境变量示例：
-
-```bash
-cp .env.example .env.local
-```
-
-然后填写：
+在项目根目录创建只保存在本机的 `.env.local`：
 
 ```env
-AI_API_KEY=your_key
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-5.1-mini
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-5.4-mini
 ```
 
-接口兼容 OpenAI 风格的 `/chat/completions`。如果不填写，`POST /api/tutor` 会返回可测试的 Demo 教学响应。
+系统通过服务端调用 OpenAI Responses API，密钥不会发送到浏览器。课程、课节和导师响应使用 Structured Outputs 按 JSON Schema 返回。没有密钥时系统会明确显示配置提示，不会把固定 Demo 冒充为模型结果。
+
+请勿把真实密钥写入源码、示例文件或浏览器变量；本地只写入 `.env.local`，在线站点使用加密环境变量。
 
 ## 已实现界面
 
 - Today：今日任务、掌握度、学习连续性和证据流
 - 课程宇宙：32 个学院、936 门标准课程、1,328 条可选学习路径
-- 动态课程：支持从用户目标、上传资料和现实结果即时生成专属课程
-- Knowledge map：知识节点、前置关系和解锁状态
-- Learning room：课程内容、Focus Mode 和可交互 AI Tutor
-- Practice：自适应练习、判题和纠错反馈
+- 动态课程：任意目录课程或用户目标都可调用 OpenAI 按需生成
+- Knowledge map：展示模型生成的模块、课节数量和解锁状态
+- Learning room：展示模型生成的首课正文、示例与可交互 OpenAI Tutor
+- Practice：使用当前生成课程中的题目、答案和解析
 - Review：基于保持率的复习队列
 - Sources：资料导入与来源可信度界面
 - Mastery proof：能力证明和证据档案
@@ -55,8 +50,9 @@ AI_MODEL=gpt-5.1-mini
 - Tailwind CSS 4 与 Shadcn UI primitives
 - Cloudflare Worker 兼容构建
 - Drizzle ORM 核心领域模型
-- 可选 AI Provider，无 SDK 锁定
-- Demo-first：零配置即可运行
+- OpenAI Responses API + Structured Outputs
+- 按需生成与设备端课程缓存，避免重复调用
+- 课程目录零配置可浏览，生成能力缺少密钥时安全降级
 - localStorage 保存当前工作区
 - WebMCP 学习导航与状态读取工具
 - 完整生产构建脚本
@@ -65,15 +61,19 @@ AI_MODEL=gpt-5.1-mini
 
 ```text
 app/
-  api/tutor/route.ts       AI Tutor API，支持 Demo / Live 双模式
+  api/curriculum/route.ts  生成完整课程、知识模块、首课和练习
+  api/lesson/route.ts      根据课程位置继续生成后续课节
+  api/tutor/route.ts       基于当前课程上下文生成导师追问与反馈
   onelearn-app.tsx         完整产品工作台与交互
   globals.css              OneLearn 视觉系统
 db/
   schema.ts                用户、目标、知识图谱、学习、评估与证据模型
 lib/onelearn/
   catalog.ts               完整课程宇宙、语言/考试展开路径与动态课程模式
+  generated-course.ts      课程、课节与练习的共享类型和 JSON Schema
   i18n.ts                  中英文界面辅助、学院/课程译名与双语检索映射
   mastery.ts               掌握度、遗忘与复习计算
+  openai.ts                Responses API 服务端调用与安全错误处理
 components/ui/             可访问的基础 UI 组件
 docs/
   ARCHITECTURE.md          产品及工程架构说明
