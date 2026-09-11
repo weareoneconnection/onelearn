@@ -1,0 +1,10 @@
+<svg width="360" height="96" viewBox="0 0 360 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="360" height="96" rx="20" fill="#060B13"/>
+<g transform="translate(16 16)">
+<circle cx="32" cy="32" r="17.5" stroke="#67E8F9" stroke-width="3.5"/>
+<circle cx="32" cy="32" r="4" fill="#0891B2"/>
+<circle cx="44.4" cy="19.6" r="4.5" fill="#67E8F9"/>
+</g>
+<text x="92" y="54" fill="#F1FAFD" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', Helvetica, Arial, sans-serif" font-size="34" font-weight="600" letter-spacing="-0.5">OneLearn</text>
+<text x="94" y="74" fill="#5F7389" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="500" letter-spacing="3">MASTERY OS</text>
+</svg>
