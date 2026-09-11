@@ -235,7 +235,7 @@ button { cursor: pointer; } button:disabled { cursor: not-allowed; }
   .lesson-body h2 { font-size: 1.75rem; }
   .tutor-panel { min-height: 0; }
   .tutor-thread { max-height: 55svh; }
-  .tutor-input-wrap { position: sticky; bottom: calc(4.5rem + env(safe-area-inset-bottom)); z-index: 5; background: #0d1826; }
+  .tutor-input-wrap { background: #0d1826; }
   .answer-option { min-height: 3.25rem; }
 }
 
