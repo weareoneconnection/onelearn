@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getBillingCustomerId, getBillingSummary } from "@/lib/onelearn/billing";
 import { resolveLearner } from "@/lib/onelearn/persistence";
-import { createBillingPortalSession, createCheckoutSession, StripeConfigurationError, StripeResponseError } from "@/lib/onelearn/stripe";
+import { billingCurrency, createBillingPortalSession, createCheckoutSession, StripeConfigurationError, StripeResponseError } from "@/lib/onelearn/stripe";
 import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +50,7 @@ async function handlePOST(request: NextRequest) {
       customerId,
       planId: parsed.data.planId,
       interval: parsed.data.interval,
+      currency: billingCurrency(parsed.data.locale),
       origin: trustedOrigin(request),
       trialDays: current.trialDays,
     });

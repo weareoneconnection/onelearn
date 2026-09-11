@@ -1,4 +1,4 @@
-import type { BillingInterval, PaidPlanId } from "./billing";
+import type { BillingCurrency, BillingInterval, PaidPlanId } from "./billing";
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
@@ -16,12 +16,27 @@ function secretKey() {
   return value;
 }
 
-function priceEnvironmentName(planId: PaidPlanId, interval: BillingInterval) {
-  return `STRIPE_PRICE_${planId.toUpperCase()}_${interval === "month" ? "MONTHLY" : "ANNUAL"}`;
+function priceEnvironmentName(planId: PaidPlanId, interval: BillingInterval, currency: BillingCurrency = "cny") {
+  const name = `STRIPE_PRICE_${planId.toUpperCase()}_${interval === "month" ? "MONTHLY" : "ANNUAL"}`;
+  return currency === "usd" ? `${name}_USD` : name;
 }
 
-export function getStripePriceId(planId: PaidPlanId, interval: BillingInterval) {
-  const environmentName = priceEnvironmentName(planId, interval);
+const checkoutCandidates: Array<[PaidPlanId, BillingInterval]> = [
+  ["personal", "month"], ["personal", "year"], ["pro", "month"], ["pro", "year"],
+];
+
+/**
+ * English-interface learners see and pay USD prices once every USD Stripe price is configured;
+ * everyone else stays on CNY. The page and checkout both use this, so the shown and charged currency match.
+ */
+export function billingCurrency(locale: "zh" | "en"): BillingCurrency {
+  if (locale !== "en") return "cny";
+  const usdReady = checkoutCandidates.every(([planId, interval]) => process.env[priceEnvironmentName(planId, interval, "usd")]?.trim());
+  return usdReady ? "usd" : "cny";
+}
+
+export function getStripePriceId(planId: PaidPlanId, interval: BillingInterval, currency: BillingCurrency = "cny") {
+  const environmentName = priceEnvironmentName(planId, interval, currency);
   const value = process.env[environmentName]?.trim();
   if (!value) throw new StripeConfigurationError(`${environmentName} is not configured`);
   return value;
@@ -29,11 +44,10 @@ export function getStripePriceId(planId: PaidPlanId, interval: BillingInterval) 
 
 export function resolvePlanFromPriceId(priceId: string | null | undefined) {
   if (!priceId) return null;
-  const candidates: Array<[PaidPlanId, BillingInterval]> = [
-    ["personal", "month"], ["personal", "year"], ["pro", "month"], ["pro", "year"],
-  ];
-  for (const [planId, interval] of candidates) {
-    if (process.env[priceEnvironmentName(planId, interval)]?.trim() === priceId) return { planId, interval };
+  for (const [planId, interval] of checkoutCandidates) {
+    for (const currency of ["cny", "usd"] as const) {
+      if (process.env[priceEnvironmentName(planId, interval, currency)]?.trim() === priceId) return { planId, interval };
+    }
   }
   return null;
 }
@@ -67,12 +81,13 @@ export async function createCheckoutSession(args: {
   customerId?: string | null;
   planId: "personal" | "pro";
   interval: BillingInterval;
+  currency: BillingCurrency;
   origin: string;
   trialDays?: number;
 }) {
   const body = new URLSearchParams();
   body.set("mode", "subscription");
-  body.set("line_items[0][price]", getStripePriceId(args.planId, args.interval));
+  body.set("line_items[0][price]", getStripePriceId(args.planId, args.interval, args.currency));
   body.set("line_items[0][quantity]", "1");
   body.set("success_url", `${args.origin}/?view=billing&checkout=success`);
   body.set("cancel_url", `${args.origin}/?view=billing&checkout=cancelled`);

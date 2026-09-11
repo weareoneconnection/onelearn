@@ -77,6 +77,21 @@ export function BillingView({ locale }: { locale: Locale }) {
   const totalCredits = (currentPlan?.aiCredits ?? 0) + bonusCredits;
   const creditsPercent = totalCredits ? Math.min(100, Math.round((data!.billing.usage.aiCreditsUsed / totalCredits) * 100)) : 0;
   const trialDays = data?.billing.trialDays ?? 0;
+  // The server picks the currency so the price shown here is the price Stripe charges.
+  const currency = data?.currency ?? "cny";
+  const priceOf = (plan: BillingPlan, period: "month" | "year") => currency === "usd"
+    ? (period === "month" ? plan.monthlyPriceUsd : plan.annualPriceUsd)
+    : (period === "month" ? plan.monthlyPriceCny : plan.annualPriceCny);
+  const money = (amount: number | null) => {
+    const value = amount ?? 0;
+    return currency === "usd" ? `$${Number.isInteger(value) ? value : value.toFixed(2)}` : `¥${value}`;
+  };
+  // Advertise the smallest annual discount across the self-serve paid plans, so the label is never overstated.
+  const savings = (data?.plans ?? []).filter((plan) => plan.id === "personal" || plan.id === "pro").map((plan) => {
+    const monthly = priceOf(plan, "month") ?? 0;
+    return monthly ? Math.round((1 - (priceOf(plan, "year") ?? 0) / (monthly * 12)) * 100) : 0;
+  });
+  const annualSaving = savings.length ? Math.min(...savings) : 0;
   const planFeatures = (plan: BillingPlan) => [
     l(`每月 ${plan.aiCredits.toLocaleString()} AI 点数`, `${plan.aiCredits.toLocaleString()} AI credits / month`),
     l(`约 ${plan.courseEquivalent} 门新课程`, `About ${plan.courseEquivalent} new courses`),
@@ -95,17 +110,18 @@ export function BillingView({ locale }: { locale: Locale }) {
     {data?.identity.mode === "device" && <section className="billing-signin"><Cloud /><div><strong>{l("登录后开通并跨设备使用", "Sign in to subscribe and sync across devices")}</strong><p>{l("登录前仍可使用免费版；会员与账单只绑定到你的安全账户。", "You can keep using Free before signing in; subscriptions and invoices are attached only to your secure account.")}</p></div><a href="/signin-with-chatgpt?return_to=%2F%3Fview%3Dbilling" target="_top" onClick={(event) => { event.preventDefault(); signIn("/?view=billing"); }}>{l("登录", "Sign in")}</a></section>}
     {data?.identity.mode === "clerk" && <section className="billing-signin"><Cloud /><div><strong>{data.identity.email}</strong><p>{l("已登录，学习档案与会员跨设备同步。", "Signed in. Your learning profile and membership sync across devices.")}</p></div><a href="#" onClick={(event) => { event.preventDefault(); void clerkSignOut(); }}>{l("退出登录", "Sign out")}</a></section>}
 
-    <div className="billing-switch" role="group" aria-label={l("计费周期", "Billing interval")}><button className={cn(interval === "month" && "is-active")} onClick={() => setInterval("month")}>{l("月付", "Monthly")}</button><button className={cn(interval === "year" && "is-active")} onClick={() => setInterval("year")}>{l("年付 · 省 28%", "Annual · save 28%")}</button></div>
+    <div className="billing-switch" role="group" aria-label={l("计费周期", "Billing interval")}><button className={cn(interval === "month" && "is-active")} onClick={() => setInterval("month")}>{l("月付", "Monthly")}</button><button className={cn(interval === "year" && "is-active")} onClick={() => setInterval("year")}>{annualSaving ? l(`年付 · 省 ${annualSaving}%`, `Annual · save ${annualSaving}%`) : l("年付", "Annual")}</button></div>
     <section className="pricing-grid">
       {data?.plans.filter((plan) => plan.id !== "team").map((plan) => {
         const isCurrent = currentPlan?.id === plan.id;
-        const price = interval === "month" ? plan.monthlyPriceCny : plan.annualPriceCny;
+        const price = priceOf(plan, interval);
+        const perMonth = currency === "usd" ? Math.round(((price ?? 0) / 12) * 100) / 100 : Math.round((price ?? 0) / 12);
         const isRecommended = plan.id === "personal";
         return <article key={plan.id} className={cn("pricing-card", isRecommended && "is-recommended", isCurrent && "is-current")}>
           {isRecommended && <span className="pricing-recommend">{l("最适合开始", "BEST TO START")}</span>}
           <div className="pricing-title"><span>{plan.id === "free" ? <Sparkles /> : plan.id === "personal" ? <Crown /> : <Gauge />}</span><div><h2>{locale === "zh" ? plan.nameZh : plan.nameEn}</h2><p>{plan.id === "free" ? l("探索完整学习系统", "Explore the full learning system") : plan.id === "personal" ? l("持续构建个人能力", "Build personal mastery consistently") : l("高频学习与专业交付", "High-frequency learning and delivery")}</p></div></div>
-          <div className="pricing-value"><strong>¥{price}</strong><span>/{interval === "month" ? l("月", "mo") : l("年", "yr")}</span></div>
-          {interval === "year" && plan.id !== "free" && <small className="pricing-saving">{l(`相当于 ¥${Math.round((price ?? 0) / 12)}/月`, `Equivalent to ¥${Math.round((price ?? 0) / 12)}/month`)}</small>}
+          <div className="pricing-value"><strong>{money(price)}</strong><span>/{interval === "month" ? l("月", "mo") : l("年", "yr")}</span></div>
+          {interval === "year" && plan.id !== "free" && <small className="pricing-saving">{l(`相当于 ${money(perMonth)}/月`, `Equivalent to ${money(perMonth)}/month`)}</small>}
           <ul>{planFeatures(plan).map((feature) => <li key={feature}><Check />{feature}</li>)}</ul>
           {isCurrent ? <Button disabled className="pricing-button is-current"><Check />{l("当前套餐", "Current plan")}</Button> : plan.id === "free" ? <Button disabled variant="outline" className="pricing-button">{l("永久免费", "Free forever")}</Button> : <Button disabled={Boolean(busy)} onClick={() => void checkout(plan.id as "personal" | "pro")} className="pricing-button">{busy === plan.id ? <LoaderCircle className="animate-spin" /> : <CreditCard />}{trialDays ? l(`免费试用 ${trialDays} 天`, `Start ${trialDays}-day free trial`) : l("安全开通", "Continue to secure checkout")}</Button>}
           {!isCurrent && plan.id !== "free" && trialDays > 0 && <small className="mt-2 block text-center text-xs text-slate-500">{l("试用期内随时取消不扣费，到期后按所选周期续费", "Cancel anytime during the trial at no charge; it then renews at the chosen interval")}</small>}
@@ -113,7 +129,7 @@ export function BillingView({ locale }: { locale: Locale }) {
       })}
     </section>
 
-    <section className="team-plan"><div className="team-plan-icon"><Users /></div><div><div className="section-kicker">TEAM & ENTERPRISE</div><h2>{l("团队版 ¥79/人/月，企业版 ¥99,800/年起", "Team at ¥79/user/month; Enterprise from ¥99,800/year")}</h2><p>{l("团队知识库、成员管理、学习分析、权限与审计。10席起，企业方案支持 SSO、SLA 和定制集成。", "Shared knowledge bases, member administration, learning analytics, permissions, and audit logs. Team starts at 10 seats; Enterprise adds SSO, SLA, and custom integrations.")}</p></div><Button onClick={() => setNotice(l("团队与企业方案由管理员开通；商务联系入口将在企业资料确认后启用。", "Team and Enterprise plans are provisioned by an administrator; the sales contact opens after company details are confirmed."))} variant="outline" className="secondary-pill">{l("咨询企业方案", "Talk to sales")}</Button></section>
+    <section className="team-plan"><div className="team-plan-icon"><Users /></div><div><div className="section-kicker">TEAM & ENTERPRISE</div><h2>{(() => { const team = data?.plans.find((plan) => plan.id === "team"); const teamPrice = money(team ? priceOf(team, "month") : null); const enterprise = currency === "usd" ? "$14,000" : "¥99,800"; return l(`团队版 ${teamPrice}/人/月，企业版 ${enterprise}/年起`, `Team at ${teamPrice}/user/month; Enterprise from ${enterprise}/year`); })()}</h2><p>{l("团队知识库、成员管理、学习分析、权限与审计。10席起，企业方案支持 SSO、SLA 和定制集成。", "Shared knowledge bases, member administration, learning analytics, permissions, and audit logs. Team starts at 10 seats; Enterprise adds SSO, SLA, and custom integrations.")}</p></div><Button onClick={() => setNotice(l("团队与企业方案由管理员开通；商务联系入口将在企业资料确认后启用。", "Team and Enterprise plans are provisioned by an administrator; the sales contact opens after company details are confirmed."))} variant="outline" className="secondary-pill">{l("咨询企业方案", "Talk to sales")}</Button></section>
 
     {data && <section className="billing-ledger"><div className="ops-table-header"><div><div className="section-kicker">BILLING LEDGER</div><h2>{l("账单记录", "Billing history")}</h2></div><Receipt /></div>{data.billing.invoices.length ? <div className="overflow-x-auto"><table className="ops-table"><thead><tr><th>{l("日期", "Date")}</th><th>{l("金额", "Amount")}</th><th>{l("状态", "Status")}</th><th>{l("发票", "Invoice")}</th></tr></thead><tbody>{data.billing.invoices.map((invoice) => <tr key={invoice.id}><td>{new Date((invoice.paidAt ?? invoice.createdAt) * 1000).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</td><td>{invoice.currency.toUpperCase()} {(invoice.amountPaid / 100).toFixed(2)}</td><td><span className={cn("source-status", invoice.status === "paid" && "is-ready")}>{invoice.status}</span></td><td>{invoice.hostedInvoiceUrl ? <a href={invoice.hostedInvoiceUrl} target="_blank" rel="noreferrer">{l("查看", "Open")}</a> : "—"}</td></tr>)}</tbody></table></div> : <div className="ops-empty">{l("还没有账单。首次成功付款后会自动出现在这里。", "No invoices yet. Your first successful payment will appear here automatically.")}</div>}</section>}
     <p className="billing-fineprint">{l("订阅由安全托管收银台处理。AI 点数按自然月重置，失败的支付不会提升套餐权益。开通即表示你同意", "Subscriptions are handled by a secure hosted checkout. AI credits reset each calendar month, and failed payments never unlock plan entitlements. By subscribing you agree to the")} <a href="/terms" target="_blank">{l("《用户协议》", "Terms")}</a>{l("、", ", ")}<a href="/privacy" target="_blank">{l("《隐私政策》", "Privacy Policy")}</a>{l("与", " and ")}<a href="/refund" target="_blank">{l("《退款规则》", "Refund Policy")}</a>{l("。", ".")}</p>

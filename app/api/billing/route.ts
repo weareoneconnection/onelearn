@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBillingSummary, PLAN_CATALOG } from "@/lib/onelearn/billing";
 import { resolveLearner } from "@/lib/onelearn/persistence";
+import { billingCurrency } from "@/lib/onelearn/stripe";
 import { withApiErrors } from "@/lib/onelearn/api-errors";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ async function handleGET(request: NextRequest) {
   return NextResponse.json({
     identity: { displayName: learner.displayName, email: learner.email, mode: learner.mode },
     plans: Object.values(PLAN_CATALOG),
+    currency: billingCurrency(locale),
     billing: await getBillingSummary(learner),
   });
 }

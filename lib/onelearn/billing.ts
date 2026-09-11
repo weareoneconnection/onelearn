@@ -14,6 +14,9 @@ export type PlanDefinition = {
   nameEn: string;
   monthlyPriceCny: number | null;
   annualPriceCny: number | null;
+  /** US dollar prices, charged through the *_USD Stripe prices for English-interface learners. */
+  monthlyPriceUsd: number | null;
+  annualPriceUsd: number | null;
   aiCredits: number;
   sourceCount: number;
   sourceBytes: number;
@@ -25,22 +28,25 @@ export type PlanDefinition = {
 
 export const PLAN_CATALOG: Record<PlanId, PlanDefinition> = {
   free: {
-    id: "free", nameZh: "免费版", nameEn: "Free", monthlyPriceCny: 0, annualPriceCny: 0,
+    id: "free", nameZh: "免费版", nameEn: "Free", monthlyPriceCny: 0, annualPriceCny: 0, monthlyPriceUsd: 0, annualPriceUsd: 0,
     aiCredits: 100, sourceCount: 3, sourceBytes: 20 * 1024 * 1024, courseEquivalent: 1, tutorEquivalent: 30, voiceMinutes: 5,
   },
   personal: {
-    id: "personal", nameZh: "个人版", nameEn: "Personal", monthlyPriceCny: 39, annualPriceCny: 299,
+    id: "personal", nameZh: "个人版", nameEn: "Personal", monthlyPriceCny: 39, annualPriceCny: 299, monthlyPriceUsd: 7.99, annualPriceUsd: 59,
     aiCredits: 800, sourceCount: 20, sourceBytes: 100 * 1024 * 1024, courseEquivalent: 5, tutorEquivalent: 300, voiceMinutes: 60,
   },
   pro: {
-    id: "pro", nameZh: "专业版", nameEn: "Pro", monthlyPriceCny: 99, annualPriceCny: 799,
+    id: "pro", nameZh: "专业版", nameEn: "Pro", monthlyPriceCny: 99, annualPriceCny: 799, monthlyPriceUsd: 19.99, annualPriceUsd: 159,
     aiCredits: 3_000, sourceCount: 100, sourceBytes: 500 * 1024 * 1024, courseEquivalent: 20, tutorEquivalent: 1_200, voiceMinutes: 300,
   },
   team: {
-    id: "team", nameZh: "团队版", nameEn: "Team", monthlyPriceCny: 79, annualPriceCny: 790,
+    id: "team", nameZh: "团队版", nameEn: "Team", monthlyPriceCny: 79, annualPriceCny: 790, monthlyPriceUsd: 15.99, annualPriceUsd: 159,
     aiCredits: 4_000, sourceCount: 300, sourceBytes: 2 * 1024 * 1024 * 1024, courseEquivalent: 30, tutorEquivalent: 1_600, voiceMinutes: 300,
   },
 };
+
+/** Currency a learner sees and is charged in; see billingCurrency() in ./stripe. */
+export type BillingCurrency = "cny" | "usd";
 
 const ACTION_CREDITS: Record<BillableAction, number> = {
   course_generation: 30,
