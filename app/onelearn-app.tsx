@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowLeft, ArrowRight, BarChart3, Bell, BookOpen, BrainCircuit, Check, ChevronRight, CircleHelp,
-  Cloud, Database, FileCheck2, FileText, FolderOpen, GraduationCap, Languages, LayoutDashboard, LibraryBig,
+  Cloud, CreditCard, Crown, Database, FileCheck2, FileText, FolderOpen, Gauge, GraduationCap, Languages, LayoutDashboard, LibraryBig,
   LoaderCircle, LockKeyhole, Map, Mic, MoreHorizontal, Orbit, Play, Plus, RefreshCw,
-  Search, Settings, ShieldCheck, Sparkles, Target, TimerReset, TriangleAlert, Trophy,
+  Receipt, Search, Settings, ShieldCheck, Sparkles, Target, TimerReset, TriangleAlert, Trophy, Users,
   Upload, WandSparkles, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,15 +29,27 @@ import {
 } from "@/lib/onelearn/i18n";
 import type { GeneratedCourseBundle, GeneratedLesson } from "@/lib/onelearn/generated-course";
 
-type View = "dashboard" | "catalog" | "path" | "learn" | "practice" | "review" | "library" | "proof" | "operations";
+type View = "dashboard" | "catalog" | "path" | "learn" | "practice" | "review" | "library" | "proof" | "billing" | "operations";
 type WebModelContext = { registerTool: (tool: Record<string, unknown>, options?: { signal?: AbortSignal }) => void | Promise<void> };
 type GenerationState = { status: "idle" | "loading" | "error"; message?: string };
 type LearnerIdentity = { displayName: string; email: string; mode: "chatgpt" | "device"; admin: boolean };
 type LearnerStats = { courseVersions: number; learningEvents: number; sources: number; averageQuality: number; dueReviews: number };
 type SourceItem = { id: string; name: string; sourceKind: "file" | "text" | "web"; mimeType: string; sizeBytes: number; sourceUrl: string | null; status: "processing" | "ready" | "failed"; createdAt: number };
 type OperationsSnapshot = {
-  metrics: { users: number; courses: number; sources: number; aiRuns7d: number; failedRuns7d: number; tokens7d: number; activeLearners7d: number; averageQuality: number };
+  metrics: { users: number; courses: number; sources: number; aiRuns7d: number; failedRuns7d: number; tokens7d: number; activeLearners7d: number; averageQuality: number; paidSubscribers: number; mrrCny: number; revenueCny: number };
   qualityQueue: Array<{ id: string; title: string; version: number; locale: string; qualityScore: number | null; qualityStatus: string; createdAt: number; email: string }>;
+};
+type BillingPlan = { id: "free" | "personal" | "pro" | "team"; nameZh: string; nameEn: string; monthlyPriceCny: number | null; annualPriceCny: number | null; aiCredits: number; sourceCount: number; sourceBytes: number; courseEquivalent: number; tutorEquivalent: number };
+type BillingPayload = {
+  identity: { displayName: string; email: string; mode: "chatgpt" | "device" };
+  plans: BillingPlan[];
+  billing: {
+    configured: boolean;
+    plan: BillingPlan;
+    subscription: { planId: string; billingInterval: "month" | "year"; status: string; cancelAtPeriodEnd: boolean; currentPeriodEnd: number | null; canManage: boolean } | null;
+    usage: { month: string; aiCreditsUsed: number; aiCreditsRemaining: number; sources: number; sourceBytes: number };
+    invoices: Array<{ id: string; amountPaid: number; currency: string; status: string; hostedInvoiceUrl: string | null; paidAt: number | null; createdAt: number }>;
+  };
 };
 
 const generatedCourseKey = (courseId: string, locale: Locale) => `onelearn-generated-course:${courseId}:${locale}`;
@@ -66,6 +78,7 @@ const navItems = [
   { id: "review" as View, zh: "复习", en: "Review", icon: TimerReset },
   { id: "library" as View, zh: "资料库", en: "Sources", icon: FolderOpen },
   { id: "proof" as View, zh: "掌握证明", en: "Mastery proof", icon: ShieldCheck },
+  { id: "billing" as View, zh: "套餐与账单", en: "Plans & billing", icon: CreditCard },
   { id: "operations" as View, zh: "运营中心", en: "Operations", icon: BarChart3 },
 ];
 
@@ -405,6 +418,108 @@ function LibraryView({ locale }: { locale: Locale }) {
   return <div className="space-y-6 animate-in fade-in duration-500"><PageHeading kicker={l("资料库", "SOURCE LIBRARY")} title={l("用你的资料学习", "Learn from your material")} detail={l("PDF、文档与网页正文进入专属向量知识库，课程和导师会检索引用。", "PDFs, documents, and web text enter your private vector knowledge base for grounded courses and tutoring.")}><Button onClick={() => setOpen(true)} className="primary-pill"><Upload /> {l("添加资料", "Add source")}</Button></PageHeading><div className="source-drop"><Database className="size-7" /><h2>{l("检索增强学习已经启用", "Retrieval-grounded learning is enabled")}</h2><p>{storage === "durable" ? l("资料元数据和原文件已安全保存，向量索引用于课程生成与导师问答。", "Metadata and originals are stored durably; the vector index grounds course generation and tutoring.") : l("当前部署使用临时元数据；OpenAI 向量索引仍可用。", "This deployment uses temporary metadata; the OpenAI vector index remains available.")}</p><div className="mt-4 flex flex-wrap justify-center gap-2"><span className="status-chip">PDF</span><span className="status-chip">DOCX</span><span className="status-chip">PPTX</span><span className="status-chip">Markdown</span><span className="status-chip">HTML</span></div></div>{sources.length ? <div className="grid gap-3">{sources.map((source) => <article key={source.id} className="source-row"><span className="source-icon"><FileText /></span><div className="min-w-0 flex-1"><h2>{source.name}</h2><p>{source.mimeType || source.sourceKind} · {Math.max(1, Math.round(source.sizeBytes / 1024))} KB</p></div><span className={cn("source-status", source.status === "ready" && "is-ready", source.status === "failed" && "is-failed")}>{source.status === "ready" ? l("可检索", "Ready") : source.status === "failed" ? l("失败", "Failed") : l("索引中", "Indexing")}</span></article>)}</div> : <article className="ai-empty-state"><FolderOpen /><h2>{l("还没有学习资料", "No learning sources yet")}</h2><p>{l("上传第一份资料后，新课程会优先依据检索到的内容生成。", "After your first upload, new courses will prioritize retrieved source evidence.")}</p></article>}<Dialog open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}><DialogContent className="border-white/10 bg-[#0c1422] text-white sm:max-w-2xl"><DialogHeader><DialogTitle>{l("添加可信学习资料", "Add a trusted learning source")}</DialogTitle><DialogDescription className="text-slate-400">{l("上传受支持文件，或粘贴网页正文并保留来源网址。单个资料最大 15 MB。", "Upload a supported file, or paste web text with its source URL. Maximum 15 MB per source.")}</DialogDescription></DialogHeader><div className="source-form"><label><span>{l("文件", "File")}</span><Input type="file" accept=".pdf,.doc,.docx,.pptx,.txt,.md,.html,.json,.js,.ts,.py" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label><div className="source-divider"><span>{l("或者粘贴正文", "OR PASTE TEXT")}</span></div><label><span>{l("来源网址（可选）", "Source URL (optional)")}</span><Input type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.com/article" /></label><label><span>{l("资料正文", "Source text")}</span><Textarea value={text} onChange={(event) => setText(event.target.value)} rows={8} placeholder={l("粘贴文章、标准、笔记或网页正文…", "Paste an article, standard, notes, or webpage text…")} /></label>{error && <p className="source-error"><TriangleAlert />{error}</p>}</div><DialogFooter><Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>{l("取消", "Cancel")}</Button><Button className="primary-pill" disabled={busy || (!file && !text.trim())} onClick={() => void uploadSource()}>{busy ? <LoaderCircle className="animate-spin" /> : <Upload />}{busy ? l("正在索引…", "Indexing…") : l("上传并索引", "Upload and index")}</Button></DialogFooter></DialogContent></Dialog></div>;
 }
 
+function BillingView({ locale }: { locale: Locale }) {
+  const l = (zh: string, en: string) => pick(locale, zh, en);
+  const [data, setData] = useState<BillingPayload | null>(null);
+  const [interval, setInterval] = useState<"month" | "year">("year");
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const checkout = new URLSearchParams(window.location.search).get("checkout");
+    const loadBilling = async () => {
+      const response = await oneLearnFetch(`/api/billing?locale=${locale}`);
+      const payload = await response.json() as BillingPayload & { error?: string };
+      if (!response.ok) throw new Error(payload.error || (locale === "zh" ? "账单信息暂时不可用" : "Billing is temporarily unavailable"));
+      if (active) setData(payload);
+    };
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      if (checkout === "success") setNotice(locale === "zh" ? "支付已完成，会员状态将在几秒内同步。" : "Payment completed. Your membership will sync in a few seconds.");
+      if (checkout === "cancelled") setNotice(locale === "zh" ? "已取消支付，没有产生扣款。" : "Checkout was cancelled. You were not charged.");
+      return loadBilling();
+    }).catch((loadError: unknown) => { if (active) setError(loadError instanceof Error ? loadError.message : (locale === "zh" ? "账单信息暂时不可用" : "Billing is temporarily unavailable")); });
+    const refresh = checkout === "success" ? window.setTimeout(() => { if (active) void loadBilling().catch(() => undefined); }, 2_000) : undefined;
+    return () => { active = false; if (refresh) window.clearTimeout(refresh); };
+  }, [locale]);
+
+  const checkout = async (planId: "personal" | "pro") => {
+    setBusy(planId); setError(""); setNotice("");
+    try {
+      const response = await oneLearnFetch("/api/billing/checkout", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId, interval, locale }),
+      });
+      const payload = await response.json() as { url?: string; signInUrl?: string; error?: string };
+      if (response.status === 401 && payload.signInUrl) { window.location.assign(payload.signInUrl); return; }
+      if (!response.ok || !payload.url) throw new Error(payload.error || l("暂时无法打开安全收银台", "The secure checkout is temporarily unavailable"));
+      window.location.assign(payload.url);
+    } catch (checkoutError) {
+      setError(checkoutError instanceof Error ? checkoutError.message : l("暂时无法打开安全收银台", "The secure checkout is temporarily unavailable"));
+      setBusy("");
+    }
+  };
+
+  const manage = async () => {
+    setBusy("manage"); setError("");
+    try {
+      const response = await oneLearnFetch("/api/billing/portal", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale }),
+      });
+      const payload = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !payload.url) throw new Error(payload.error || l("暂时无法打开订阅管理", "Subscription management is temporarily unavailable"));
+      window.location.assign(payload.url);
+    } catch (manageError) {
+      setError(manageError instanceof Error ? manageError.message : l("暂时无法打开订阅管理", "Subscription management is temporarily unavailable"));
+      setBusy("");
+    }
+  };
+
+  if (!data && !error) return <article className="ai-empty-state"><LoaderCircle className="animate-spin" /><h2>{l("正在读取套餐与用量", "Loading plans and usage")}</h2></article>;
+  const currentPlan = data?.billing.plan;
+  const creditsPercent = currentPlan ? Math.min(100, Math.round((data!.billing.usage.aiCreditsUsed / currentPlan.aiCredits) * 100)) : 0;
+  const planFeatures = (plan: BillingPlan) => [
+    l(`每月 ${plan.aiCredits.toLocaleString()} AI 点数`, `${plan.aiCredits.toLocaleString()} AI credits / month`),
+    l(`约 ${plan.courseEquivalent} 门新课程`, `About ${plan.courseEquivalent} new courses`),
+    l(`约 ${plan.tutorEquivalent.toLocaleString()} 次导师问答`, `About ${plan.tutorEquivalent.toLocaleString()} tutor turns`),
+    l(`${plan.sourceCount} 份可信资料`, `${plan.sourceCount} trusted sources`),
+  ];
+  return <div className="billing-page animate-in fade-in duration-500">
+    <section className="billing-hero">
+      <div><div className="eyebrow"><Crown className="size-3.5" /> ONELEARN MEMBERSHIP</div><h1>{l("选择与你目标匹配的学习算力。", "Choose the learning power that fits your goal.")}</h1><p>{l("按月获得 AI 点数，用于课程生成、课节扩展、导师问答和资料索引；不会按 Token 给你出账。", "Receive monthly AI credits for course generation, lesson expansion, tutoring, and source indexing—never a surprise token bill.")}</p></div>
+      {data && <article className="billing-usage-card"><div className="flex items-center justify-between"><span>{l("当前套餐", "CURRENT PLAN")}</span><strong>{locale === "zh" ? data.billing.plan.nameZh : data.billing.plan.nameEn}</strong></div><div className="billing-credit-number"><b>{data.billing.usage.aiCreditsRemaining.toLocaleString()}</b><span>/ {data.billing.plan.aiCredits.toLocaleString()} {l("点剩余", "left")}</span></div><Progress value={creditsPercent} className="h-1.5 bg-white/8 [&>div]:bg-cyan-300" /><div className="billing-usage-meta"><span><Gauge />{l(`本月已用 ${data.billing.usage.aiCreditsUsed}`, `${data.billing.usage.aiCreditsUsed} used this month`)}</span><span><FileText />{l(`${data.billing.usage.sources}/${data.billing.plan.sourceCount} 份资料`, `${data.billing.usage.sources}/${data.billing.plan.sourceCount} sources`)}</span></div>{data.billing.subscription?.canManage && <Button disabled={busy === "manage"} onClick={() => void manage()} variant="ghost" className="billing-manage">{busy === "manage" ? <LoaderCircle className="animate-spin" /> : <Settings />}{l("管理订阅与付款方式", "Manage subscription & payment")}</Button>}</article>}
+    </section>
+
+    {notice && <div className="billing-notice"><Check />{notice}</div>}
+    {error && <div className="ai-error-banner" role="alert"><TriangleAlert /><div><strong>{l("计费操作未完成", "Billing action did not complete")}</strong><span>{error}</span></div><button onClick={() => setError("")} aria-label={l("关闭", "Dismiss")}><X /></button></div>}
+    {data?.identity.mode === "device" && <section className="billing-signin"><Cloud /><div><strong>{l("登录后开通并跨设备使用", "Sign in to subscribe and sync across devices")}</strong><p>{l("登录前仍可使用免费版；会员与账单只绑定到你的安全账户。", "You can keep using Free before signing in; subscriptions and invoices are attached only to your secure account.")}</p></div><a href="/signin-with-chatgpt?return_to=%2F%3Fview%3Dbilling" target="_top">{l("登录", "Sign in")}</a></section>}
+
+    <div className="billing-switch" role="group" aria-label={l("计费周期", "Billing interval")}><button className={cn(interval === "month" && "is-active")} onClick={() => setInterval("month")}>{l("月付", "Monthly")}</button><button className={cn(interval === "year" && "is-active")} onClick={() => setInterval("year")}>{l("年付 · 省 28%", "Annual · save 28%")}</button></div>
+    <section className="pricing-grid">
+      {data?.plans.filter((plan) => plan.id !== "team").map((plan) => {
+        const isCurrent = currentPlan?.id === plan.id;
+        const price = interval === "month" ? plan.monthlyPriceCny : plan.annualPriceCny;
+        const isRecommended = plan.id === "personal";
+        return <article key={plan.id} className={cn("pricing-card", isRecommended && "is-recommended", isCurrent && "is-current")}>
+          {isRecommended && <span className="pricing-recommend">{l("最适合开始", "BEST TO START")}</span>}
+          <div className="pricing-title"><span>{plan.id === "free" ? <Sparkles /> : plan.id === "personal" ? <Crown /> : <Gauge />}</span><div><h2>{locale === "zh" ? plan.nameZh : plan.nameEn}</h2><p>{plan.id === "free" ? l("探索完整学习系统", "Explore the full learning system") : plan.id === "personal" ? l("持续构建个人能力", "Build personal mastery consistently") : l("高频学习与专业交付", "High-frequency learning and delivery")}</p></div></div>
+          <div className="pricing-value"><strong>¥{price}</strong><span>/{interval === "month" ? l("月", "mo") : l("年", "yr")}</span></div>
+          {interval === "year" && plan.id !== "free" && <small className="pricing-saving">{l(`相当于 ¥${Math.round((price ?? 0) / 12)}/月`, `Equivalent to ¥${Math.round((price ?? 0) / 12)}/month`)}</small>}
+          <ul>{planFeatures(plan).map((feature) => <li key={feature}><Check />{feature}</li>)}</ul>
+          {isCurrent ? <Button disabled className="pricing-button is-current"><Check />{l("当前套餐", "Current plan")}</Button> : plan.id === "free" ? <Button disabled variant="outline" className="pricing-button">{l("永久免费", "Free forever")}</Button> : <Button disabled={Boolean(busy)} onClick={() => void checkout(plan.id as "personal" | "pro")} className="pricing-button">{busy === plan.id ? <LoaderCircle className="animate-spin" /> : <CreditCard />}{l("安全开通", "Continue to secure checkout")}</Button>}
+        </article>;
+      })}
+    </section>
+
+    <section className="team-plan"><div className="team-plan-icon"><Users /></div><div><div className="section-kicker">TEAM & ENTERPRISE</div><h2>{l("团队版 ¥79/人/月，企业版 ¥99,800/年起", "Team at ¥79/user/month; Enterprise from ¥99,800/year")}</h2><p>{l("团队知识库、成员管理、学习分析、权限与审计。10席起，企业方案支持 SSO、SLA 和定制集成。", "Shared knowledge bases, member administration, learning analytics, permissions, and audit logs. Team starts at 10 seats; Enterprise adds SSO, SLA, and custom integrations.")}</p></div><Button onClick={() => setNotice(l("团队与企业方案由管理员开通；商务联系入口将在企业资料确认后启用。", "Team and Enterprise plans are provisioned by an administrator; the sales contact opens after company details are confirmed."))} variant="outline" className="secondary-pill">{l("咨询企业方案", "Talk to sales")}</Button></section>
+
+    {data && <section className="billing-ledger"><div className="ops-table-header"><div><div className="section-kicker">BILLING LEDGER</div><h2>{l("账单记录", "Billing history")}</h2></div><Receipt /></div>{data.billing.invoices.length ? <div className="overflow-x-auto"><table className="ops-table"><thead><tr><th>{l("日期", "Date")}</th><th>{l("金额", "Amount")}</th><th>{l("状态", "Status")}</th><th>{l("发票", "Invoice")}</th></tr></thead><tbody>{data.billing.invoices.map((invoice) => <tr key={invoice.id}><td>{new Date((invoice.paidAt ?? invoice.createdAt) * 1000).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</td><td>{invoice.currency.toUpperCase()} {(invoice.amountPaid / 100).toFixed(2)}</td><td><span className={cn("source-status", invoice.status === "paid" && "is-ready")}>{invoice.status}</span></td><td>{invoice.hostedInvoiceUrl ? <a href={invoice.hostedInvoiceUrl} target="_blank" rel="noreferrer">{l("查看", "Open")}</a> : "—"}</td></tr>)}</tbody></table></div> : <div className="ops-empty">{l("还没有账单。首次成功付款后会自动出现在这里。", "No invoices yet. Your first successful payment will appear here automatically.")}</div>}</section>}
+    <p className="billing-fineprint">{l("订阅由安全托管收银台处理。AI 点数按自然月重置，失败的支付不会提升套餐权益。", "Subscriptions are handled by a secure hosted checkout. AI credits reset each calendar month, and failed payments never unlock plan entitlements.")}</p>
+  </div>;
+}
+
 function OperationsView({ locale }: { locale: Locale }) {
   const l = (zh: string, en: string) => pick(locale, zh, en);
   const [data, setData] = useState<OperationsSnapshot | null>(null);
@@ -436,6 +551,9 @@ function OperationsView({ locale }: { locale: Locale }) {
   }, [locale]);
   const metrics = data ? [
     [l("用户", "Users"), data.metrics.users, l("累计身份档案", "total profiles")],
+    [l("付费用户", "Paid subscribers"), data.metrics.paidSubscribers, l("有效订阅", "active subscriptions")],
+    [l("订阅月收入", "Subscription MRR"), `¥${Math.round(data.metrics.mrrCny).toLocaleString()}`, l("标准化月收入", "normalized monthly revenue")],
+    [l("累计实收", "Revenue collected"), `¥${Math.round(data.metrics.revenueCny).toLocaleString()}`, l("成功支付账单", "paid invoices")],
     [l("活跃学习者", "Active learners"), data.metrics.activeLearners7d, l("最近 7 天", "last 7 days")],
     [l("课程版本", "Course versions"), data.metrics.courses, l("全部版本", "all versions")],
     [l("可信资料", "Trusted sources"), data.metrics.sources, l("已完成索引", "indexed")],
@@ -503,7 +621,11 @@ export function OneLearnApp() {
     const savedLocale = window.localStorage.getItem("onelearn-locale") as Locale | null;
     const storedCourse = window.localStorage.getItem("onelearn-active-course");
     const hydrationFrame = window.requestAnimationFrame(() => {
-      if (saved && navItems.some((item) => item.id === saved)) setView(saved);
+      const requestedView = new URLSearchParams(window.location.search).get("view") as View | null;
+      if (requestedView && navItems.some((item) => item.id === requestedView)) {
+        setView(requestedView);
+        window.localStorage.setItem("onelearn-view", requestedView);
+      } else if (saved && navItems.some((item) => item.id === saved)) setView(saved);
       if (savedLocale === "zh" || savedLocale === "en") {
         setLocale(savedLocale);
         document.documentElement.lang = savedLocale === "zh" ? "zh-CN" : "en";
@@ -728,7 +850,7 @@ export function OneLearnApp() {
     <Sidebar collapsible="icon" className="border-r border-white/7 bg-[#08101c]" variant="sidebar">
       <SidebarHeader className="p-4"><Brand /></SidebarHeader>
       <SidebarContent className="px-2"><SidebarGroup><SidebarGroupContent><SidebarMenu>{navItems.map((item) => { const label = pick(locale, item.zh, item.en); return <SidebarMenuItem key={item.id}><SidebarMenuButton isActive={view === item.id} tooltip={label} onClick={() => navigate(item.id)} className="h-10 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white data-[active=true]:bg-cyan-300/10 data-[active=true]:text-cyan-200"><item.icon /><span>{label}</span></SidebarMenuButton></SidebarMenuItem>; })}</SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
-      <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><div className="flex items-center gap-3 rounded-xl p-2 group-data-[collapsible=icon]:justify-center"><span className="flex size-8 items-center justify-center rounded-lg bg-white/7 text-xs font-semibold text-cyan-200">{identity?.displayName?.slice(0, 2).toUpperCase() ?? "OL"}</span><div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><p className="truncate text-xs font-medium text-slate-200">{identity?.displayName ?? l("学习者", "Learner")}</p><p className="flex items-center gap-1 text-[11px] text-slate-600">{storage === "durable" ? <Cloud className="size-3" /> : <Database className="size-3" />}{storage === "durable" ? l("云端学习档案", "Cloud learning profile") : l("设备模式", "Device mode")}</p></div><Settings aria-label={l("设置", "Settings")} className="size-4 text-slate-600 group-data-[collapsible=icon]:hidden" /></div></SidebarFooter>
+      <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><button onClick={() => navigate("billing")} className="flex items-center gap-3 rounded-xl p-2 text-left hover:bg-white/5 group-data-[collapsible=icon]:justify-center"><span className="flex size-8 items-center justify-center rounded-lg bg-white/7 text-xs font-semibold text-cyan-200">{identity?.displayName?.slice(0, 2).toUpperCase() ?? "OL"}</span><div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><p className="truncate text-xs font-medium text-slate-200">{identity?.displayName ?? l("学习者", "Learner")}</p><p className="flex items-center gap-1 text-[11px] text-slate-600">{storage === "durable" ? <Cloud className="size-3" /> : <Database className="size-3" />}{storage === "durable" ? l("云端学习档案", "Cloud learning profile") : l("设备模式", "Device mode")}</p></div><Settings aria-label={l("套餐与账单", "Plans and billing")} className="size-4 text-slate-600 group-data-[collapsible=icon]:hidden" /></button></SidebarFooter>
     </Sidebar>
     <SidebarInset className="min-w-0 bg-[#060b13]">
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/7 bg-[#060b13]/90 px-4 backdrop-blur-xl sm:px-7"><SidebarTrigger aria-label={l("切换侧边栏", "Toggle sidebar")} className="text-slate-400 hover:bg-white/5 hover:text-white" /><div className="h-5 w-px bg-white/8" /><span className="text-sm text-slate-400">{title}</span><div className="ml-auto flex items-center gap-2"><LocaleSwitch locale={locale} onChange={changeLocale} /><button onClick={() => setCommandOpen(true)} className="command-button"><Search /><span className="hidden sm:inline">{l("全局搜索", "Search anything")}</span><kbd className="hidden lg:inline">⌘ K</kbd></button><Button variant="ghost" size="icon-sm" aria-label={l("帮助", "Help")} className="hidden text-slate-500 hover:bg-white/5 hover:text-white sm:inline-flex"><CircleHelp /></Button><Button variant="ghost" size="icon-sm" aria-label={l("通知", "Notifications")} className="relative text-slate-500 hover:bg-white/5 hover:text-white"><Bell /><i className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-cyan-300" /></Button></div></header>
@@ -743,6 +865,7 @@ export function OneLearnApp() {
         {view === "review" && <ReviewView locale={locale} />}
         {view === "library" && <LibraryView locale={locale} />}
         {view === "proof" && <ProofView locale={locale} />}
+        {view === "billing" && <BillingView locale={locale} />}
         {view === "operations" && <OperationsView locale={locale} />}
       </main>
     </SidebarInset>

@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   let generationReserved = false;
 
   try {
-    await reserveAiUsage(learner, 18_000);
+    await reserveAiUsage(learner, 18_000, "course_generation");
     generationReserved = true;
     vectorStoreId = await getLearnerVectorStore(learner);
     if (vectorStoreId) {
@@ -193,7 +193,12 @@ export async function POST(request: NextRequest) {
     if (generationReserved && !generationLogged) {
       await recordAiRun({ learner, purpose: "curriculum", promptVersion: "curriculum-v2", model: getOpenAIModel(), latencyMs: 0, status: error instanceof UsageLimitError ? "blocked" : "failed", errorCode: error instanceof Error ? error.message.slice(0, 100) : "unknown" });
     }
-    if (error instanceof UsageLimitError) return NextResponse.json({ error: errorMessage(data.locale, "limit"), code: error.code }, { status: 429 });
+    if (error instanceof UsageLimitError) return NextResponse.json({
+      error: error.code === "monthly_credit_limit"
+        ? (data.locale === "zh" ? "本月 AI 点数已用完，请升级套餐或等待下月重置" : "Your monthly AI credits are used up. Upgrade or wait for the monthly reset")
+        : errorMessage(data.locale, "limit"),
+      code: error.code,
+    }, { status: 429 });
     if (error instanceof OpenAIConfigurationError) return NextResponse.json({ error: errorMessage(data.locale, "configuration"), code: "configuration_required" }, { status: 503 });
     if (error instanceof z.ZodError) return NextResponse.json({ error: errorMessage(data.locale, "provider"), code: "invalid_model_output" }, { status: 502 });
     if (error instanceof OpenAIResponseError) console.error("Curriculum generation failed:", error.message, error.requestId ?? "");

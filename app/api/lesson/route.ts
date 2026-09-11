@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   let reserved = false;
 
   try {
-    await reserveAiUsage(learner, 10_000);
+    await reserveAiUsage(learner, 10_000, "lesson_generation");
     reserved = true;
     const vectorStoreId = await getLearnerVectorStore(learner);
     const citations = vectorStoreId ? await searchVectorStore(vectorStoreId, `${data.courseTitle} ${data.moduleTitle} ${data.lesson.title}`, 5).catch(() => []) : [];
@@ -58,7 +58,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (reserved) await recordAiRun({ learner, purpose: "lesson", promptVersion: "lesson-v2", model: getOpenAIModel(), latencyMs: 0, status: error instanceof UsageLimitError ? "blocked" : "failed", errorCode: error instanceof Error ? error.message.slice(0, 100) : "unknown", courseVersionId: data.courseVersionId });
-    if (error instanceof UsageLimitError) return NextResponse.json({ error: data.locale === "zh" ? "今日课节生成用量已达上限" : "Today's lesson generation limit has been reached", code: error.code }, { status: 429 });
+    if (error instanceof UsageLimitError) return NextResponse.json({
+      error: error.code === "monthly_credit_limit"
+        ? (data.locale === "zh" ? "本月 AI 点数已用完，请升级套餐" : "Your monthly AI credits are used up. Upgrade your plan")
+        : (data.locale === "zh" ? "今日课节生成用量已达上限" : "Today's lesson generation limit has been reached"),
+      code: error.code,
+    }, { status: 429 });
     if (error instanceof OpenAIConfigurationError) {
       return NextResponse.json({ error: data.locale === "zh" ? "尚未配置 OpenAI API 密钥" : "The OpenAI API key is not configured", code: "configuration_required" }, { status: 503 });
     }

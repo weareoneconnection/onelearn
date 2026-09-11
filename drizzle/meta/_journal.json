@@ -8,6 +8,13 @@
       "when": 1789101290669,
       "tag": "0000_flaky_vance_astro",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789115826165,
+      "tag": "0001_chubby_hex",
+      "breakpoints": true
     }
   ]
 }

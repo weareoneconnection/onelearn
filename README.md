@@ -40,6 +40,7 @@ OPENAI_MODEL=gpt-5.4-mini
 - Sources：上传 PDF、Office 文档、Markdown 或网页正文，进入 OpenAI 向量检索知识库
 - Mastery proof：能力证明和证据档案
 - Operations：受管理员白名单保护的用户、课程质量、资料、Token 与失败率看板
+- Plans & billing：免费/个人/专业/团队套餐、月付年付、AI 点数、Stripe 托管收银台、订阅门户与账单记录
 - New learning goal：学习目标创建流程
 - Global search：全局命令入口
 - Bilingual system：中英文界面、课程名称、搜索索引和 AI 导师响应统一切换
@@ -56,6 +57,7 @@ OPENAI_MODEL=gpt-5.4-mini
 - OpenAI Responses API + Structured Outputs
 - 独立课程质量评测；严重安全或事实问题会阻止课程上线并进入复核队列
 - OpenAI 请求超时、指数退避重试、请求 ID、Token/延迟/失败日志与每用户每日预算
+- 套餐权益、月度 AI 点数、资料容量、订阅状态、支付事件幂等和运营收入指标
 - 按需生成、服务端课程版本化与设备端缓存，避免重复调用
 - 课程目录零配置可浏览，生成能力缺少密钥时安全降级
 - localStorage 保存当前工作区
@@ -73,6 +75,7 @@ app/
   api/workspace/route.ts   身份、跨设备工作区与偏好同步
   api/progress/route.ts    学习行为与评估证据事件
   api/admin/metrics/       受保护的运营与质量指标
+  api/billing/             套餐状态、Stripe Checkout、订阅门户与安全 Webhook
   onelearn-app.tsx         完整产品工作台与交互
   globals.css              OneLearn 视觉系统
 db/
@@ -85,6 +88,8 @@ lib/onelearn/
   mastery.ts               掌握度、遗忘与复习计算
   openai.ts                Responses、Files 与 Vector Stores API 网关
   persistence.ts           D1/R2 数据访问、身份、配额与运营聚合
+  billing.ts               套餐权益、AI 点数、订阅、账单与收入聚合
+  stripe.ts                Stripe REST 网关与 Webhook 签名验证
   quality.ts               独立课程质量闸门
 components/ui/             可访问的基础 UI 组件
 docs/
@@ -120,10 +125,17 @@ OPENAI_MODEL=gpt-5.4-mini
 ONELEARN_ADMIN_EMAILS=admin@example.com,ops@example.com
 ONELEARN_DAILY_AI_REQUESTS=40
 ONELEARN_DAILY_TOKEN_BUDGET=250000
+STRIPE_SECRET_KEY=encrypted_secret
+STRIPE_WEBHOOK_SECRET=encrypted_secret
+STRIPE_PRICE_PERSONAL_MONTHLY=price_xxx
+STRIPE_PRICE_PERSONAL_ANNUAL=price_xxx
+STRIPE_PRICE_PRO_MONTHLY=price_xxx
+STRIPE_PRICE_PRO_ANNUAL=price_xxx
+ONELEARN_SITE_URL=https://onelearn-mastery-os.king-ma-7068.chatgpt.site
 ```
 
-`ONELEARN_ADMIN_EMAILS` 为空时，运营中心默认拒绝所有访问。API 密钥必须使用部署平台的加密 Secret，不能以明文提交到仓库。
+`ONELEARN_ADMIN_EMAILS` 为空时，运营中心默认拒绝所有访问。Stripe Webhook 地址是 `/api/billing/webhook`，至少订阅 `checkout.session.completed`、`customer.subscription.created`、`customer.subscription.updated`、`customer.subscription.deleted`、`invoice.paid` 和 `invoice.payment_failed`。所有 API 与 Webhook 密钥必须使用部署平台的加密 Secret，不能以明文提交到仓库。
 
 ## 从原型进入生产
 
-当前版本已完成身份、持久化、课程版本、资料检索、AI 用量治理、自动质量评测和运营看板的 Beta 主链路。走向正式商业生产仍需补充支付/订阅、团队与组织权限、用户数据导出/删除、来源冲突检测、人工复核操作台、端到端压测和正式监控告警。
+当前版本已完成身份、持久化、课程版本、资料检索、AI 用量治理、自动质量评测、Stripe 订阅收费和运营看板的 Beta 主链路。走向正式商业生产仍需补充团队与组织权限、税务与退款流程、用户数据导出/删除、来源冲突检测、人工复核操作台、端到端压测和正式监控告警。

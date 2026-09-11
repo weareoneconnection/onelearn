@@ -14,6 +14,7 @@ import {
   listSources,
   recordAiRun,
   reserveAiUsage,
+  reserveSourceCapacity,
   resolveLearner,
   saveSourceRecord,
   UsageLimitError,
@@ -43,8 +44,6 @@ export async function POST(request: NextRequest) {
   let reserved = false;
   try {
     if (!isOpenAIConfigured()) throw new OpenAIConfigurationError("OPENAI_API_KEY is not configured");
-    await reserveAiUsage(learner);
-    reserved = true;
     const contentType = request.headers.get("content-type") ?? "";
     let upload: File;
     let sourceKind: "file" | "text" | "web" = "file";
@@ -70,6 +69,9 @@ export async function POST(request: NextRequest) {
     if (upload.size <= 0 || upload.size > MAX_SOURCE_BYTES) throw new Error("source_too_large");
     const extension = upload.name.split(".").pop()?.toLowerCase() ?? "";
     if (!supportedExtensions.has(extension)) throw new Error("unsupported_file");
+    await reserveSourceCapacity(learner, upload.size);
+    await reserveAiUsage(learner, 0, "source_index");
+    reserved = true;
 
     const sourceId = crypto.randomUUID();
     const vectorStoreId = await getLearnerVectorStore(learner)
@@ -99,7 +101,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ source: record, storage }, { status: 201 });
   } catch (error) {
     if (reserved) await recordAiRun({ learner, purpose: "source_index", promptVersion: "source-index-v1", model: "openai-file-search", latencyMs: Date.now() - startedAt, status: "failed", errorCode: error instanceof Error ? error.message.slice(0, 100) : "unknown" });
-    if (error instanceof UsageLimitError) return NextResponse.json({ error: locale === "zh" ? "今日 AI 用量已达上限" : "Today's AI usage limit has been reached", code: error.code }, { status: 429 });
+    if (error instanceof UsageLimitError) {
+      const limits: Record<string, { zh: string; en: string }> = {
+        monthly_credit_limit: { zh: "本月 AI 点数已用完，请升级套餐或等待下月重置", en: "Your monthly AI credits are used up. Upgrade or wait for the monthly reset" },
+        source_limit: { zh: "当前套餐的资料数量已达上限", en: "Your plan's source count limit has been reached" },
+        source_storage_limit: { zh: "当前套餐的资料容量已达上限", en: "Your plan's source storage limit has been reached" },
+      };
+      return NextResponse.json({ error: limits[error.code]?.[locale] ?? (locale === "zh" ? "AI 用量已达上限" : "AI usage limit has been reached"), code: error.code }, { status: 429 });
+    }
     if (error instanceof OpenAIConfigurationError) return NextResponse.json({ error: locale === "zh" ? "尚未配置 OpenAI API 密钥" : "The OpenAI API key is not configured", code: "configuration_required" }, { status: 503 });
     if (error instanceof OpenAIResponseError) {
       console.error("Source indexing failed:", error.message);

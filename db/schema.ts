@@ -136,6 +136,67 @@ export const usageDaily = sqliteTable("usage_daily", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 }, (t) => [uniqueIndex("usage_daily_user_day_unique").on(t.userId, t.day)]);
 
+export const billingCustomers = sqliteTable("billing_customers", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  provider: text("provider", { enum: ["stripe"] }).notNull().default("stripe"),
+  providerCustomerId: text("provider_customer_id").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+}, (t) => [uniqueIndex("billing_customers_provider_customer_unique").on(t.provider, t.providerCustomerId)]);
+
+export const subscriptions = sqliteTable("subscriptions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  provider: text("provider", { enum: ["stripe"] }).notNull().default("stripe"),
+  providerSubscriptionId: text("provider_subscription_id").notNull(),
+  providerCustomerId: text("provider_customer_id").notNull(),
+  planId: text("plan_id", { enum: ["personal", "pro", "team"] }).notNull(),
+  billingInterval: text("billing_interval", { enum: ["month", "year"] }).notNull(),
+  status: text("status").notNull(),
+  cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" }).notNull().default(false),
+  currentPeriodStart: integer("current_period_start", { mode: "timestamp" }),
+  currentPeriodEnd: integer("current_period_end", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+}, (t) => [
+  uniqueIndex("subscriptions_provider_subscription_unique").on(t.provider, t.providerSubscriptionId),
+  index("idx_subscriptions_user_status").on(t.userId, t.status),
+  index("idx_subscriptions_customer").on(t.providerCustomerId),
+]);
+
+export const entitlementUsage = sqliteTable("entitlement_usage", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  month: text("month").notNull(),
+  metric: text("metric", { enum: ["ai_credits"] }).notNull(),
+  quantity: integer("quantity").notNull().default(0),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+}, (t) => [uniqueIndex("entitlement_usage_user_month_metric_unique").on(t.userId, t.month, t.metric)]);
+
+export const billingInvoices = sqliteTable("billing_invoices", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id),
+  providerSubscriptionId: text("provider_subscription_id"),
+  amountPaid: integer("amount_paid").notNull().default(0),
+  currency: text("currency").notNull().default("cny"),
+  status: text("status").notNull(),
+  hostedInvoiceUrl: text("hosted_invoice_url"),
+  paidAt: integer("paid_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+}, (t) => [
+  index("idx_billing_invoices_user_created").on(t.userId, t.createdAt),
+  index("idx_billing_invoices_subscription").on(t.providerSubscriptionId),
+]);
+
+export const billingEvents = sqliteTable("billing_events", {
+  id: text("id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  livemode: integer("livemode", { mode: "boolean" }).notNull().default(false),
+  processedAt: integer("processed_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+}, (t) => [index("idx_billing_events_processed").on(t.processedAt, t.createdAt)]);
+
 export const aiRuns = sqliteTable("ai_runs", {
   id: text("id").primaryKey(), userId: text("user_id").references(() => users.id), purpose: text("purpose").notNull(), model: text("model").notNull(),
   promptVersion: text("prompt_version").notNull(), inputTokens: integer("input_tokens").notNull().default(0), outputTokens: integer("output_tokens").notNull().default(0),

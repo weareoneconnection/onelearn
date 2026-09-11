@@ -1,6 +1,7 @@
 import type { D1Database, D1Result } from "@cloudflare/workers-types";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { getD1 } from "@/db";
+import { assertSourceCapacity, BillingLimitError, consumeAiCredits, getBillingAdminMetrics, refundAiCredits, type BillableAction } from "./billing";
 import type { GeneratedCourseBundle } from "./generated-course";
 
 export type LearnerIdentity = {
@@ -24,7 +25,7 @@ export type SourceRecord = {
 };
 
 export class UsageLimitError extends Error {
-  constructor(public readonly code: "daily_request_limit" | "daily_token_limit") {
+  constructor(public readonly code: "daily_request_limit" | "daily_token_limit" | "monthly_credit_limit" | "source_limit" | "source_storage_limit") {
     super(code);
   }
 }
@@ -238,7 +239,7 @@ function numericEnv(name: string, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export async function reserveAiUsage(learner: LearnerIdentity, plannedTokens = 0) {
+export async function reserveAiUsage(learner: LearnerIdentity, plannedTokens = 0, action?: BillableAction) {
   const requestLimit = numericEnv("ONELEARN_DAILY_AI_REQUESTS", 40);
   const tokenLimit = numericEnv("ONELEARN_DAILY_TOKEN_BUDGET", 250_000);
   const key = `${learner.userId}:${today()}`;
@@ -247,6 +248,8 @@ export async function reserveAiUsage(learner: LearnerIdentity, plannedTokens = 0
     const usage = memoryStore.usage.get(key) ?? { requests: 0, inputTokens: 0, outputTokens: 0, failures: 0 };
     if (usage.requests >= requestLimit) throw new UsageLimitError("daily_request_limit");
     if (usage.inputTokens + usage.outputTokens + plannedTokens > tokenLimit) throw new UsageLimitError("daily_token_limit");
+    try { await consumeAiCredits(learner, action); }
+    catch (error) { if (error instanceof BillingLimitError) throw new UsageLimitError(error.code); throw error; }
     usage.requests += 1;
     memoryStore.usage.set(key, usage);
     return { ...usage, requestLimit, tokenLimit, storage: "ephemeral" as const };
@@ -256,11 +259,18 @@ export async function reserveAiUsage(learner: LearnerIdentity, plannedTokens = 0
     .first<{ requests: number; inputTokens: number; outputTokens: number; failures: number }>();
   if ((usage?.requests ?? 0) >= requestLimit) throw new UsageLimitError("daily_request_limit");
   if ((usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0) + plannedTokens > tokenLimit) throw new UsageLimitError("daily_token_limit");
+  try { await consumeAiCredits(learner, action); }
+  catch (error) { if (error instanceof BillingLimitError) throw new UsageLimitError(error.code); throw error; }
   await db.prepare(`INSERT INTO usage_daily (id, user_id, day, requests, input_tokens, output_tokens, failures, updated_at)
     VALUES (?, ?, ?, 1, 0, 0, 0, ?)
     ON CONFLICT(user_id, day) DO UPDATE SET requests = usage_daily.requests + 1, updated_at = excluded.updated_at`)
     .bind(crypto.randomUUID(), learner.userId, today(), nowSeconds()).run();
   return { requests: (usage?.requests ?? 0) + 1, requestLimit, tokenLimit, storage: "durable" as const };
+}
+
+export async function reserveSourceCapacity(learner: LearnerIdentity, incomingBytes: number) {
+  try { return await assertSourceCapacity(learner, incomingBytes); }
+  catch (error) { if (error instanceof BillingLimitError) throw new UsageLimitError(error.code); throw error; }
 }
 
 export async function recordAiRun(args: {
@@ -276,6 +286,12 @@ export async function recordAiRun(args: {
   errorCode?: string | null;
   courseVersionId?: string | null;
 }) {
+  const billableAction: BillableAction | undefined = args.purpose === "curriculum" ? "course_generation"
+    : args.purpose === "lesson" ? "lesson_generation"
+    : args.purpose === "tutor" ? "tutor_turn"
+    : args.purpose === "source_index" ? "source_index"
+    : undefined;
+  if (args.status !== "success" && billableAction) await refundAiCredits(args.learner, billableAction).catch(() => undefined);
   const key = `${args.learner.userId}:${today()}`;
   const db = await getD1();
   if (!db) {
@@ -329,6 +345,7 @@ export async function getAdminSnapshot(db: D1Database) {
       FROM course_versions cv JOIN users u ON u.id = cv.user_id
       WHERE cv.quality_status != 'passed' ORDER BY cv.created_at DESC LIMIT 12`),
   ]);
+  const billing = await getBillingAdminMetrics();
   return {
     storage: "durable" as const,
     metrics: {
@@ -336,6 +353,7 @@ export async function getAdminSnapshot(db: D1Database) {
       aiRuns7d: await firstCount(runs), failedRuns7d: await firstCount(failures), tokens7d: await firstCount(tokens),
       activeLearners7d: await firstCount(active),
       averageQuality: Number((quality.results?.[0] as AverageRow | undefined)?.average ?? 0),
+      ...billing,
     },
     qualityQueue: queue.results ?? [],
   };
