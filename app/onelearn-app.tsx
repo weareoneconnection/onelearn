@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, CircleHelp, Cloud, Database, LibraryBig, LoaderCircle, Search, Settings, TriangleAlert, X } from "lucide-react";
+import { ChevronRight, CircleHelp, LibraryBig, LoaderCircle, Search, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupConte
 import { academies, type CatalogEntry, courseCatalog, searchCatalog } from "@/lib/onelearn/catalog";
 import { academyName, courseTitleEn, formatCatalogNumber, groupName, levelName, type Locale, pick } from "@/lib/onelearn/i18n";
 import type { GeneratedCourseBundle } from "@/lib/onelearn/generated-course";
+import { AccountMenu } from "@/components/onelearn/account-menu";
 import { BillingView } from "@/components/onelearn/billing";
 import { generatedCourseKey, navItems, oneLearnFetch } from "@/components/onelearn/client";
 import { CourseUniverse } from "@/components/onelearn/course-universe";
@@ -286,7 +287,7 @@ export function OneLearnApp() {
     <Sidebar collapsible="icon" className="border-r border-white/7 bg-[#08101c]" variant="sidebar">
       <SidebarHeader className="p-4"><Brand /></SidebarHeader>
       <SidebarContent className="px-2"><SidebarGroup><SidebarGroupContent><SidebarMenu>{navItems.map((item) => { const label = pick(locale, item.zh, item.en); return <SidebarMenuItem key={item.id}><SidebarMenuButton isActive={view === item.id} tooltip={label} onClick={() => navigate(item.id)} className="h-10 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white data-[active=true]:bg-cyan-300/10 data-[active=true]:text-cyan-200"><item.icon /><span>{label}</span></SidebarMenuButton></SidebarMenuItem>; })}</SidebarMenu></SidebarGroupContent></SidebarGroup></SidebarContent>
-      <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><button onClick={() => navigate("billing")} className="flex items-center gap-3 rounded-xl p-2 text-left hover:bg-white/5 group-data-[collapsible=icon]:justify-center"><span className="flex size-8 items-center justify-center rounded-lg bg-white/7 text-xs font-semibold text-cyan-200">{identity?.displayName?.slice(0, 2).toUpperCase() ?? "OL"}</span><div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"><p className="truncate text-xs font-medium text-slate-200">{identity?.displayName ?? l("学习者", "Learner")}</p><p className="flex items-center gap-1 text-[11px] text-slate-600">{storage === "durable" ? <Cloud className="size-3" /> : <Database className="size-3" />}{storage === "durable" ? l("云端学习档案", "Cloud learning profile") : l("设备模式", "Device mode")}</p></div><Settings aria-label={l("套餐与账单", "Plans and billing")} className="size-4 text-slate-600 group-data-[collapsible=icon]:hidden" /></button></SidebarFooter>
+      <SidebarFooter className="gap-3 border-t border-white/7 p-3"><NewGoalDialog locale={locale} onStartGoal={startGoal} isGenerating={generationState.status === "loading"} /><AccountMenu locale={locale} identity={identity} onNavigate={navigate} onFeedback={() => setFeedbackOpen(true)} /></SidebarFooter>
     </Sidebar>
     <SidebarInset className="min-w-0 bg-[#060b13]">
       <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/7 bg-[#060b13]/90 px-4 backdrop-blur-xl sm:px-7"><SidebarTrigger aria-label={l("切换侧边栏", "Toggle sidebar")} className="size-10 text-slate-400 hover:bg-white/5 hover:text-white md:size-7" /><div className="h-5 w-px bg-white/8" /><span className="min-w-0 truncate text-sm text-slate-400">{title}</span><div className="ml-auto flex items-center gap-2"><LocaleSwitch locale={locale} onChange={changeLocale} /><button onClick={() => setCommandOpen(true)} className="command-button"><Search /><span className="hidden sm:inline">{l("全局搜索", "Search anything")}</span><kbd className="hidden lg:inline">⌘ K</kbd></button><Button variant="ghost" size="icon-sm" aria-label={l("帮助与反馈", "Help & feedback")} onClick={() => setFeedbackOpen(true)} className="size-10 text-slate-500 hover:bg-white/5 hover:text-white md:size-8"><CircleHelp /></Button></div></header>
