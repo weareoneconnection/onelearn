@@ -51,8 +51,9 @@ export function buildReminderEmail(args: { locale: "zh" | "en"; name: string | n
 ${streakLine ? `<p>${escapeHtml(streakLine)}</p>` : ""}
 <p style="margin:24px 0"><a href="${escapeHtml(reviewUrl)}" style="background:#0891b2;color:#fff;padding:10px 20px;border-radius:10px;text-decoration:none;font-weight:600">${cta}</a></p>
 <p style="font-size:12px;color:#6b7280;margin-top:32px">${footer} <a href="${escapeHtml(args.unsubscribeUrl)}" style="color:#6b7280">${unsubscribe}</a></p>
+<p style="font-size:11px;color:#9ca3af;margin-top:8px"><a href="https://www.oneailabs.ai/" style="color:#9ca3af">Powered by OneAI Labs</a></p>
 </div>`;
-  const text = [subject, "", intro, ...args.titles.map((title) => `- ${title}`), streakLine, "", `${cta}: ${reviewUrl}`, "", `${footer} ${unsubscribe}: ${args.unsubscribeUrl}`].filter((line) => line !== undefined).join("\n");
+  const text = [subject, "", intro, ...args.titles.map((title) => `- ${title}`), streakLine, "", `${cta}: ${reviewUrl}`, "", `${footer} ${unsubscribe}: ${args.unsubscribeUrl}`, "", "Powered by OneAI Labs · https://www.oneailabs.ai/"].filter((line) => line !== undefined).join("\n");
   return { subject, html, text };
 }
 

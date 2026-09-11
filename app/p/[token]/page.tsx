@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getD1 } from "@/db";
+import { PoweredBy } from "@/components/legal-page";
 import { getPublicProof } from "@/lib/onelearn/proof-share";
 
 export const dynamic = "force-dynamic";
@@ -29,5 +30,6 @@ export default async function PublicProofPage({ params }: { params: Promise<{ to
         <p>{[item.course, `掌握度 ${item.score}%`, item.verifiedAt ? `验证于 ${new Date(item.verifiedAt * 1000).toISOString().slice(0, 10)}` : null].filter(Boolean).join(" · ")}</p>
       </section>)}
     </article>
+    <PoweredBy />
   </main>;
 }

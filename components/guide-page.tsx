@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { USER_GUIDE, type GuideBlock } from "@/lib/onelearn/guide";
+import { PoweredBy } from "./legal-page";
 
 function Block({ block }: { block: GuideBlock }) {
   if (typeof block === "string") return <p>{block}</p>;
@@ -31,5 +32,6 @@ export function GuidePage({ locale }: { locale: "zh" | "en" }) {
       </section>)}
       <p className="guide-back"><Link href="/">{zh ? "返回 OneLearn 开始学习 →" : "Back to OneLearn →"}</Link></p>
     </article>
+    <PoweredBy />
   </main>;
 }
