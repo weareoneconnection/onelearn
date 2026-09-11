@@ -241,3 +241,19 @@ export const masteryRecords = sqliteTable("mastery_records", {
   uniqueIndex("mastery_records_user_course_node_unique").on(t.userId, t.courseVersionId, t.nodeKey),
   index("idx_mastery_records_user_review").on(t.userId, t.nextReviewAt),
 ]);
+
+// Learner-submitted support requests, triaged in the operations center.
+export const feedback = sqliteTable("feedback", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  email: text("email").notNull(),
+  category: text("category", { enum: ["bug", "billing", "content", "suggestion", "other"] }).notNull(),
+  message: text("message").notNull(),
+  page: text("page"),
+  status: text("status", { enum: ["open", "resolved"] }).notNull().default("open"),
+  createdAt: integer("created_at").notNull(),
+  resolvedAt: integer("resolved_at"),
+}, (t) => [
+  index("idx_feedback_status_created").on(t.status, t.createdAt),
+  index("idx_feedback_user_created").on(t.userId, t.createdAt),
+]);

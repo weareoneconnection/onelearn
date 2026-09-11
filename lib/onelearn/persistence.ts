@@ -5,6 +5,7 @@ import { assertSourceCapacity, BillingLimitError, consumeAiCredits, getBillingAd
 import type { GeneratedCourseBundle } from "./generated-course";
 import { clientIpFromHeaders, hashClientKey } from "./identity";
 import { getClerkLearner } from "./clerk-auth";
+import { listFeedback } from "./feedback";
 
 export type LearnerIdentity = {
   userId: string;
@@ -419,6 +420,11 @@ export async function getAdminSnapshot(db: D1Database) {
       FROM course_versions cv JOIN users u ON u.id = cv.user_id
       WHERE cv.quality_status != 'passed' ORDER BY cv.created_at DESC LIMIT 12`),
   ]);
+  const [verifiedNodes, answers] = await db.batch([
+    db.prepare("SELECT COUNT(*) AS count FROM mastery_records WHERE unassisted_passes >= 1 AND review_passes >= 1"),
+    db.prepare("SELECT COUNT(*) AS count FROM learning_events WHERE created_at >= ? AND event_type IN ('practice_answered', 'review_completed')").bind(since),
+  ]);
+  const feedback = await listFeedback(db);
   const billing = await getBillingAdminMetrics();
   return {
     storage: "durable" as const,
@@ -427,8 +433,12 @@ export async function getAdminSnapshot(db: D1Database) {
       aiRuns7d: await firstCount(runs), failedRuns7d: await firstCount(failures), tokens7d: await firstCount(tokens),
       activeLearners7d: await firstCount(active),
       averageQuality: Number((quality.results?.[0] as AverageRow | undefined)?.average ?? 0),
+      verifiedNodes: await firstCount(verifiedNodes),
+      answers7d: await firstCount(answers),
+      openFeedback: feedback.open,
       ...billing,
     },
+    feedback: feedback.items,
     qualityQueue: queue.results ?? [],
   };
 }

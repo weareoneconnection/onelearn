@@ -38,7 +38,8 @@ export function loadClerk(locale: "zh" | "en" = "zh"): Promise<ClerkInstance | n
     });
     const clerk = (window as unknown as { Clerk?: ClerkInstance }).Clerk;
     if (!clerk) return null;
-    const localization = locale === "zh" ? (await import("@clerk/localizations")).zhCN : undefined;
+    // Import only the Chinese pack; the package root bundles ~50 locales (~3.6 MB).
+    const localization = locale === "zh" ? (await import("@clerk/localizations/zh-CN")).zhCN : undefined;
     await clerk.load({ localization });
     return clerk;
   })().catch((error: unknown) => {
