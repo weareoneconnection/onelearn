@@ -56,6 +56,35 @@ export const curriculumSchema = z.object({
 export type GeneratedLesson = z.infer<typeof lessonSchema>;
 export type GeneratedCurriculum = z.infer<typeof curriculumSchema>;
 
+export const qualityReportSchema = z.object({
+  overallScore: z.number().min(0).max(100),
+  status: z.enum(["passed", "review", "blocked"]),
+  dimensions: z.object({
+    factualGrounding: z.number().min(0).max(100),
+    coverage: z.number().min(0).max(100),
+    pedagogy: z.number().min(0).max(100),
+    safety: z.number().min(0).max(100),
+    clarity: z.number().min(0).max(100),
+  }),
+  strengths: z.array(z.string()),
+  issues: z.array(z.object({
+    severity: z.enum(["low", "medium", "high"]),
+    category: z.enum(["factuality", "coverage", "pedagogy", "safety", "clarity", "citation"]),
+    message: z.string(),
+    recommendation: z.string(),
+  })),
+  verificationNotes: z.array(z.string()),
+});
+
+export type QualityReport = z.infer<typeof qualityReportSchema>;
+
+export type SourceCitation = {
+  fileId: string;
+  filename: string;
+  score: number;
+  excerpt: string;
+};
+
 export type GeneratedCourseBundle = {
   curriculum: GeneratedCurriculum;
   generation: {
@@ -63,8 +92,14 @@ export type GeneratedCourseBundle = {
     model: string;
     generatedAt: string;
     locale: "zh" | "en";
-    grounding: "model_knowledge" | "provided_source";
+    grounding: "model_knowledge" | "provided_source" | "file_search";
+    courseVersionId?: string;
+    version?: number;
+    storage?: "durable" | "ephemeral";
+    usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
   };
+  citations?: SourceCitation[];
+  quality?: QualityReport;
 };
 
 const strictObject = (properties: Record<string, unknown>, required: string[]) => ({
@@ -133,3 +168,26 @@ export const curriculumJsonSchema = strictObject({
   },
   firstLesson: lessonJsonSchema,
 }, ["title", "subtitle", "overview", "audience", "difficulty", "estimatedHours", "learningOutcomes", "prerequisites", "safetyNotice", "modules", "firstLesson"]);
+
+export const qualityReportJsonSchema = strictObject({
+  overallScore: { type: "number", minimum: 0, maximum: 100 },
+  status: { type: "string", enum: ["passed", "review", "blocked"] },
+  dimensions: strictObject({
+    factualGrounding: { type: "number", minimum: 0, maximum: 100 },
+    coverage: { type: "number", minimum: 0, maximum: 100 },
+    pedagogy: { type: "number", minimum: 0, maximum: 100 },
+    safety: { type: "number", minimum: 0, maximum: 100 },
+    clarity: { type: "number", minimum: 0, maximum: 100 },
+  }, ["factualGrounding", "coverage", "pedagogy", "safety", "clarity"]),
+  strengths: { type: "array", items: { type: "string" } },
+  issues: {
+    type: "array",
+    items: strictObject({
+      severity: { type: "string", enum: ["low", "medium", "high"] },
+      category: { type: "string", enum: ["factuality", "coverage", "pedagogy", "safety", "clarity", "citation"] },
+      message: { type: "string" },
+      recommendation: { type: "string" },
+    }, ["severity", "category", "message", "recommendation"]),
+  },
+  verificationNotes: { type: "array", items: { type: "string" } },
+}, ["overallScore", "status", "dimensions", "strengths", "issues", "verificationNotes"]);

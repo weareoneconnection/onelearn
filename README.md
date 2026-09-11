@@ -28,7 +28,7 @@ OPENAI_MODEL=gpt-5.4-mini
 
 请勿把真实密钥写入源码、示例文件或浏览器变量；本地只写入 `.env.local`，在线站点使用加密环境变量。
 
-## 已实现界面
+## 已实现能力（Beta）
 
 - Today：今日任务、掌握度、学习连续性和证据流
 - 课程宇宙：32 个学院、936 门标准课程、1,328 条可选学习路径
@@ -37,8 +37,9 @@ OPENAI_MODEL=gpt-5.4-mini
 - Learning room：展示模型生成的首课正文、示例与可交互 OpenAI Tutor
 - Practice：使用当前生成课程中的题目、答案和解析
 - Review：基于保持率的复习队列
-- Sources：资料导入与来源可信度界面
+- Sources：上传 PDF、Office 文档、Markdown 或网页正文，进入 OpenAI 向量检索知识库
 - Mastery proof：能力证明和证据档案
+- Operations：受管理员白名单保护的用户、课程质量、资料、Token 与失败率看板
 - New learning goal：学习目标创建流程
 - Global search：全局命令入口
 - Bilingual system：中英文界面、课程名称、搜索索引和 AI 导师响应统一切换
@@ -49,9 +50,13 @@ OPENAI_MODEL=gpt-5.4-mini
 - Next.js 16 + React 19 + TypeScript
 - Tailwind CSS 4 与 Shadcn UI primitives
 - Cloudflare Worker 兼容构建
-- Drizzle ORM 核心领域模型
+- ChatGPT 登录身份（Sites）与匿名设备身份安全降级
+- Cloudflare D1 持久化学习档案、课程版本、质量报告、事件、AI 调用与每日配额
+- R2 保存原始资料，OpenAI Vector Stores 提供语义与关键词检索
 - OpenAI Responses API + Structured Outputs
-- 按需生成与设备端课程缓存，避免重复调用
+- 独立课程质量评测；严重安全或事实问题会阻止课程上线并进入复核队列
+- OpenAI 请求超时、指数退避重试、请求 ID、Token/延迟/失败日志与每用户每日预算
+- 按需生成、服务端课程版本化与设备端缓存，避免重复调用
 - 课程目录零配置可浏览，生成能力缺少密钥时安全降级
 - localStorage 保存当前工作区
 - WebMCP 学习导航与状态读取工具
@@ -62,18 +67,25 @@ OPENAI_MODEL=gpt-5.4-mini
 ```text
 app/
   api/curriculum/route.ts  生成完整课程、知识模块、首课和练习
-  api/lesson/route.ts      根据课程位置继续生成后续课节
+  api/lesson/route.ts      根据课程位置和检索资料继续生成后续课节
   api/tutor/route.ts       基于当前课程上下文生成导师追问与反馈
+  api/sources/route.ts     资料上传、OpenAI 向量索引与来源清单
+  api/workspace/route.ts   身份、跨设备工作区与偏好同步
+  api/progress/route.ts    学习行为与评估证据事件
+  api/admin/metrics/       受保护的运营与质量指标
   onelearn-app.tsx         完整产品工作台与交互
   globals.css              OneLearn 视觉系统
 db/
-  schema.ts                用户、目标、知识图谱、学习、评估与证据模型
+  schema.ts                用户、课程版本、来源、质量、用量、学习与证据模型
+drizzle/                   可部署的 D1 数据库迁移
 lib/onelearn/
   catalog.ts               完整课程宇宙、语言/考试展开路径与动态课程模式
   generated-course.ts      课程、课节与练习的共享类型和 JSON Schema
   i18n.ts                  中英文界面辅助、学院/课程译名与双语检索映射
   mastery.ts               掌握度、遗忘与复习计算
-  openai.ts                Responses API 服务端调用与安全错误处理
+  openai.ts                Responses、Files 与 Vector Stores API 网关
+  persistence.ts           D1/R2 数据访问、身份、配额与运营聚合
+  quality.ts               独立课程质量闸门
 components/ui/             可访问的基础 UI 组件
 docs/
   ARCHITECTURE.md          产品及工程架构说明
@@ -88,6 +100,8 @@ npm run build
 npm run start
 ```
 
+`npm run start` 会先把 `drizzle/` 中尚未执行的迁移应用到本地 D1，再启动 Worker 生产预览。
+
 Vercel 使用仓库中的 `vercel.json` 自动执行原生 Next.js 构建：
 
 ```bash
@@ -96,6 +110,20 @@ npm run build:vercel
 
 Vercel 项目无需手动填写 Output Directory。请将 Framework Preset 保持为 Next.js，并在项目环境变量中配置 `OPENAI_API_KEY`；可选配置 `OPENAI_MODEL`。
 
+完整的跨设备版本使用 Sites / Cloudflare 部署，并由 `.openai/hosting.json` 绑定 D1 `DB` 与 R2 `SOURCES`。Vercel 没有这些 Cloudflare 绑定时会自动进入设备模式：课程仍可生成，但服务端资料元数据、配额和学习事件仅为进程级临时状态。
+
+生产环境变量：
+
+```env
+OPENAI_API_KEY=encrypted_secret
+OPENAI_MODEL=gpt-5.4-mini
+ONELEARN_ADMIN_EMAILS=admin@example.com,ops@example.com
+ONELEARN_DAILY_AI_REQUESTS=40
+ONELEARN_DAILY_TOKEN_BUDGET=250000
+```
+
+`ONELEARN_ADMIN_EMAILS` 为空时，运营中心默认拒绝所有访问。API 密钥必须使用部署平台的加密 Secret，不能以明文提交到仓库。
+
 ## 从原型进入生产
 
-当前包可直接演示完整产品体验。正式上线时按 `docs/ARCHITECTURE.md` 的顺序接入身份认证、数据库、对象存储、文档解析、支付和可观测性；这些能力已经在领域模型和接口边界中预留，不需要推翻前端产品结构。
+当前版本已完成身份、持久化、课程版本、资料检索、AI 用量治理、自动质量评测和运营看板的 Beta 主链路。走向正式商业生产仍需补充支付/订阅、团队与组织权限、用户数据导出/删除、来源冲突检测、人工复核操作台、端到端压测和正式监控告警。

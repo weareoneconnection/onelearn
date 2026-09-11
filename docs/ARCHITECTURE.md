@@ -40,26 +40,19 @@ OneLearn 独立拥有身份、数据、AI 教学、内容、计费和部署，�
 
 界面本地化采用 `zh` / `en` 双语状态，语言选择持久化到浏览器。课程以中文原始名称作为稳定数据标识，通过独立翻译层生成英文显示名，并把中英文学院、分组和课程名同时写入搜索索引，避免切换语言后搜索能力缩水。
 
-## 4. 推荐生产拓扑
+## 4. 当前 Beta 拓扑
 
 ```text
-Web / PWA
-   │
-API Gateway
-   │
-Modular Application Core
-   ├── Learning domain
-   ├── Knowledge domain
-   ├── Assessment domain
-   ├── Identity & Billing
-   └── AI Gateway
-   │
-PostgreSQL + pgvector ── Object Storage
-   │
-Queue / Workers ── Document Processing
+Next.js / Cloudflare Worker
+   ├── ChatGPT identity headers ── device identity fallback
+   ├── Curriculum / Lesson / Tutor APIs
+   ├── Quality Gate (separate Structured Output evaluation)
+   ├── OpenAI Files + Vector Stores search
+   ├── D1: profiles, versions, events, usage, quality
+   └── R2: original source files
 ```
 
-首个生产版本继续使用模块化单体。只有当某个队列或计算负载具有独立扩缩容需求时，才拆为服务。
+同一代码库也支持 Vercel 原生 Next.js 部署；没有 D1/R2 绑定时明确降级为设备/临时存储模式，不冒充跨设备持久化。首个生产版本继续使用模块化单体，只有队列或计算负载需要独立扩缩容时再拆服务。
 
 ## 5. 掌握度模型
 
@@ -110,27 +103,27 @@ Demo 目录由 `lib/onelearn/catalog.ts` 提供，完整收录 32 个学院和�
 
 目录只是入口，不保存 1,328 门静态教材。用户选择任意目录课程，或使用目标生成、资料生成和结果反推模式后，Curriculum Engine 会按需生成模块、课节、首课正文、示例、检查问题和练习。后续课节按学习位置继续生成，AI Tutor 使用当前课程目标、参考答案、掌握度和最近对话作为上下文。
 
-生成结果记录模型、响应 ID、生成时间、语言与依据类型，并缓存在当前设备。未提供外部资料时必须明确标记为模型知识生成；重要事实和高风险内容仍需可信来源或人工复核。
+生成结果记录模型、响应 ID、生成时间、语言、依据类型、Token 用量、课程版本与质量报告，并缓存在当前设备和持久化工作区。用户资料由 OpenAI Vector Stores 做语义与关键词检索，返回的文件、相关度与摘录随课程保存。未提供外部资料时明确标记为模型知识生成；严重安全或事实问题阻止课程激活，其余需复核内容进入运营队列。
 
 ## 9. 上线顺序
 
-### Foundation
+### Foundation（Beta 已完成）
 
-接入正式身份、PostgreSQL、迁移、对象存储、事件日志和权限。
+已接入 ChatGPT 身份、D1 迁移、R2、事件日志和管理员白名单；企业版继续扩展组织角色、数据导出与删除。
 
-### Intelligence
+### Intelligence（Beta 已完成主链路）
 
-把 Goal、Diagnostic、Tutor、Assessment 分别实现为有版本的服务边界；增加模型回退、限流、缓存和成本预算。
+课程、课节、导师与独立质量评测均有版本化 Prompt；已加入重试、限流、缓存和每日 Token 预算。后续补充多模型回退和离线任务队列。
 
-### Knowledge
+### Knowledge（Beta 已完成主链路）
 
-实现 PDF/网页解析、来源片段、pgvector 检索、知识节点审核与冲突检测。
+已实现文档/网页正文上传、来源摘录和向量检索；后续补充自动网页抓取、来源冲突检测、有效日期和知识节点级审核。
 
-### Trust
+### Trust（部分完成）
 
-加入多评估器、Rubric、人工复核、延迟复测、审计日志和 Mastery Passport 验证链接。
+已加入独立质量评估器、Rubric、质量闸门与复核队列；后续补充人工复核写操作、多评估器一致性、延迟复测和 Mastery Passport 验证链接。
 
-### Scale
+### Scale（待扩展）
 
 加入团队空间、内容 Studio、多语言、支付、分析、Feature Flags 和运营后台。
 
