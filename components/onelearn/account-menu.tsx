@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3, ChevronsUpDown, CircleHelp, Cloud, CreditCard, FileText, Gift, LogIn, LogOut, Mail, Smartphone } from "lucide-react";
+import { BarChart3, BookOpen, ChevronsUpDown, CircleHelp, Cloud, CreditCard, FileText, Gift, LogIn, LogOut, Mail, Smartphone } from "lucide-react";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { clerkSignOut } from "@/lib/onelearn/clerk-browser";
 import { type Locale, pick } from "@/lib/onelearn/i18n";
@@ -42,6 +42,7 @@ export function AccountMenu({ locale, identity, emailReminders, onToggleReminder
       {identity?.admin && <DropdownMenuItem onSelect={() => onNavigate("operations")}><BarChart3 />{l("运营中心", "Operations center")}</DropdownMenuItem>}
       {signedIn && emailReminders !== null && <DropdownMenuCheckboxItem checked={emailReminders} onCheckedChange={(checked) => onToggleReminders(checked === true)} onSelect={(event) => event.preventDefault()}><Mail className="mr-2 size-4" />{l("复习提醒邮件", "Review reminder emails")}</DropdownMenuCheckboxItem>}
       <DropdownMenuItem onSelect={onFeedback}><CircleHelp />{l("帮助与反馈", "Help & feedback")}</DropdownMenuItem>
+      <DropdownMenuItem asChild><Link href={locale === "zh" ? "/guide" : "/guide?lang=en"} target="_blank"><BookOpen />{l("使用手册", "User guide")}</Link></DropdownMenuItem>
       <DropdownMenuItem asChild><Link href="/terms" target="_blank"><FileText />{l("用户协议与隐私", "Terms & privacy")}</Link></DropdownMenuItem>
       {signedIn && <>
         <DropdownMenuSeparator className="bg-white/8" />

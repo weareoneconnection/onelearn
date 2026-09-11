@@ -247,3 +247,19 @@ button { cursor: pointer; } button:disabled { cursor: not-allowed; }
   .catalog-toolbar select { font-size: 16px; }
   .billing-switch button, .billing-signin a { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; }
 }
+
+/* User guide (/guide) */
+.guide-doc section { scroll-margin-top: 1rem; }
+.guide-toc { margin: 1.5rem 0 2rem; border: 1px solid rgb(255 255 255 / 8%); border-radius: 1rem; background: rgb(255 255 255 / 2%); padding: 1rem 1.25rem; }
+.guide-toc > p { margin: 0; color: #7f93a8; font-size: .8rem !important; }
+.guide-toc ol { columns: 2; column-gap: 2rem; margin-top: .5rem; padding-left: 1.2rem; list-style: decimal; }
+.guide-toc li { margin: .25rem 0; font-size: .9rem; }
+.guide-toc a { color: #67e8f9; }
+.guide-steps, .guide-list { margin-top: .6rem; padding-left: 1.3rem; }
+.guide-steps { list-style: decimal; }
+.guide-list { list-style: disc; }
+.guide-steps li, .guide-list li { margin: .4rem 0; font-size: .92rem; line-height: 1.75; }
+.guide-tip { margin-top: .9rem !important; border-left: 3px solid #67e8f9; border-radius: .5rem; background: rgb(103 232 249 / 6%); padding: .65rem .9rem; color: #cfe9f2; }
+.guide-back { margin-top: 2.5rem !important; }
+.guide-back a { color: #67e8f9; }
+@media (max-width: 640px) { .guide-toc ol { columns: 1; } }

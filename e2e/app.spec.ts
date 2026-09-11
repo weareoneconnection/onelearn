@@ -18,6 +18,16 @@ test("legal pages render in Chinese and English", async ({ page }) => {
   }
 });
 
+test("user guide renders in both languages with working contents links", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /3 分钟上手指南/ }).click();
+  await expect(page.getByRole("heading", { name: "OneLearn 使用手册" })).toBeVisible();
+  await page.getByRole("link", { name: "套餐与 AI 点数" }).click();
+  await expect(page.getByRole("heading", { name: "12. 套餐与 AI 点数" })).toBeInViewport();
+  await page.getByRole("link", { name: "English" }).click();
+  await expect(page.getByRole("heading", { name: "OneLearn User Guide" })).toBeVisible();
+});
+
 test("demo practice question can be answered", async ({ page }) => {
   await page.goto("/?view=practice");
   await expect(page.getByText("单项最佳答案")).toBeVisible();
