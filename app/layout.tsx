@@ -4,18 +4,18 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://onelearn-mastery-os.king-ma-7068.chatgpt.site"),
   title: "OneLearn — Mastery OS",
-  description: "覆盖 32 个学院与 1,000+ 学习路径，把任何可信知识转化为持久、可验证的能力。",
+  description: "中英文双语学习系统，覆盖 32 个学院与 1,000+ 学习路径。A bilingual mastery system for durable, verifiable skills.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
   openGraph: {
     type: "website",
     title: "OneLearn — Mastery OS",
-    description: "覆盖 32 个学院与 1,000+ 学习路径，把任何可信知识转化为持久、可验证的能力。",
+    description: "中英文双语学习系统，覆盖 32 个学院与 1,000+ 学习路径。A bilingual mastery system for durable, verifiable skills.",
     siteName: "OneLearn",
   },
   twitter: {
     card: "summary",
     title: "OneLearn — Mastery OS",
-    description: "覆盖 32 个学院与 1,000+ 学习路径，把任何可信知识转化为持久、可验证的能力。",
+    description: "中英文双语学习系统，覆盖 32 个学院与 1,000+ 学习路径。A bilingual mastery system for durable, verifiable skills.",
   },
 };
 

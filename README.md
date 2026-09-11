@@ -2,6 +2,8 @@
 
 OneLearn 是一个独立的 AI 原生学习系统原型。它把学习目标、知识图谱、AI 教学、练习、复习和能力证据放进同一个闭环。
 
+系统支持中英文即时切换，并会在浏览器中记住语言选择。界面、课程目录、搜索结果、学习流程和 AI 导师响应均随语言联动；中文课程原名在英文模式下仍会保留，便于核对来源。
+
 ## 直接运行
 
 环境要求：Node.js 22.13 或更高版本。
@@ -44,6 +46,7 @@ AI_MODEL=gpt-5.1-mini
 - Mastery proof：能力证明和证据档案
 - New learning goal：学习目标创建流程
 - Global search：全局命令入口
+- Bilingual system：中英文界面、课程名称、搜索索引和 AI 导师响应统一切换
 - Responsive UI：桌面、平板和手机适配
 
 ## 工程能力
@@ -69,6 +72,7 @@ db/
   schema.ts                用户、目标、知识图谱、学习、评估与证据模型
 lib/onelearn/
   catalog.ts               完整课程宇宙、语言/考试展开路径与动态课程模式
+  i18n.ts                  中英文界面辅助、学院/课程译名与双语检索映射
   mastery.ts               掌握度、遗忘与复习计算
 components/ui/             可访问的基础 UI 组件
 docs/

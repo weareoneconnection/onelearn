@@ -1,3 +1,5 @@
+import { academyName, courseTitleEn, groupName } from "./i18n";
+
 export type CourseGroup = {
   name: string;
   courses: string[];
@@ -1438,7 +1440,7 @@ function makeEntry(
     kind,
     level,
     description: `围绕「${title}」建立从入门诊断、知识地图、讲解与练习，到项目验证和长期复习的完整掌握路径。`,
-    searchable: `${title} ${academy.name} ${group} ${level}`.toLocaleLowerCase("zh-CN"),
+    searchable: `${title} ${academy.name} ${group} ${level} ${courseTitleEn(title)} ${academyName(academy.id, academy.name, "en")} ${groupName(group, "en")}`.toLocaleLowerCase("en-US"),
   };
 }
 
